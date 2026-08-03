@@ -1,0 +1,35 @@
+# Mini-SOAR configuration
+server:
+  host: 0.0.0.0
+  port: 8080
+
+# Where playbooks (YAML) live — hot-reloaded on change
+playbooks_dir: playbooks
+
+# Audit + state storage (SQLite — PDPA defensible log)
+data_dir: data
+db_path: data/minisoar.db
+
+# Evidence preservation folder
+evidence_dir: evidence
+
+# LINE Notify token (optional). If empty, notifications are simulated
+# (logged + shown in UI) so the demo works without a token.
+line_token: ""
+line_notify_url: "https://notify-api.line.me/api/notify"
+
+# Firewall backend: "simulated" (safe demo, no real blocking)
+# or "iptables" (Linux only, real stateful block with auto-expiry)
+firewall_backend: simulated
+
+# Block expiry seconds (stateful: blocks auto-expire)
+block_default_duration: 600
+
+# Human-gate time-box: if an approval is unanswered after this many seconds,
+# auto-execute the action (auto_execute) or escalate loudly (escalate).
+# Ransomware-style threats must not wait forever on a one-man SOC.
+approval_timeout_seconds: 60
+approval_timeout_action: auto_execute
+
+# Accept alerts from any SIEM; optional shared secret check
+webhook_secret: ""

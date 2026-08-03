@@ -1,0 +1,19 @@
+# T7 — Account takeover / credential stuffing
+name: t7-account-takeover
+description: การยึดบัญชี / ใช้รหัสผ่านซ้ำ
+enabled: true
+gate: human
+when:
+  pattern: 'account takeover|impossible travel|credential stuffing|new device|unusual login'
+steps:
+  - action: notify
+    params:
+      template: "🔐 สงสัยยึดบัญชี: {title} — ผู้ใช้ {user}"
+  - action: preserve_evidence
+    params: {}
+  - action: block_ip
+    params:
+      ip_field: src_ip
+      duration: 3600
+  - action: audit
+    params: {}

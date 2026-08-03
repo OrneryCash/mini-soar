@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}รออนุมัติ{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:16px">รายการรอการอนุมัติ</h2>
+<table>
+  <tr><th>#</th><th>เวลา</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th><th>ตัดสินใจ</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td class="mono">{{ r.ts[11:19] }}</td>
+    <td>{{ r.playbook }}</td>
+    <td>{{ r.action }}</td>
+    <td>{{ r.summary or r.params }}</td>
+    <td>
+      <button class="btn btn-approve" onclick="decide({{ r.id }}, true)">✅ อนุมัติ</button>
+      <button class="btn btn-deny" onclick="decide({{ r.id }}, false)">❌ ปฏิเสธ</button>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">ไม่มีรายการรออนุมัติ</td></tr>
+  {% endfor %}
+</table>
+<script>
+async function decide(id, approve) {
+  await fetch(`/api/approvals/${id}/${approve ? 'approve' : 'deny'}`, {method: 'POST'});
+  location.reload();
+}
+</script>
+{% endblock %}

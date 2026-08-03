@@ -1,0 +1,19 @@
+# T5 — Data exfiltration / double extortion (human-gated)
+name: t5-exfiltration
+description: การขโมยข้อมูลออกนอกเครือข่าย — ต้องอนุมัติก่อนดำเนินการ
+enabled: true
+gate: human
+when:
+  pattern: 'exfil|data.*transfer|large.*upload|dns.*tunnel|outbound.*large|13tb'
+steps:
+  - action: notify
+    params:
+      template: "🚨 สงสัยขโมยข้อมูล: {title} — โฮสต์ {host}"
+  - action: preserve_evidence
+    params: {}
+  - action: block_ip
+    params:
+      ip_field: src_ip
+      duration: 3600
+  - action: audit
+    params: {}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}เพลย์บุ๊ก{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:16px">เพลย์บุ๊ก (เปิด-ปิดได้)</h2>
+<p style="color:#5a6b82; margin-bottom:16px">เปิด-ปิดการทำงานแต่ละรายการได้ตามต้องการ ผู้ดูแลไม่ต้องแก้ไขไฟล์ใด ๆ</p>
+<table>
+  <tr><th>ชื่อ</th><th>รายละเอียด</th><th>โหมด</th><th>สถานะ</th><th>เปิด/ปิด</th></tr>
+  {% for b in books %}
+  <tr>
+    <td><strong>{{ b.name }}</strong></td>
+    <td>{{ b.description }}</td>
+    <td><span class="tag {{ b.gate }}">{{ 'อัตโนมัติ' if b.gate=='auto' else 'ต้องอนุมัติ' }}</span></td>
+    <td><span class="tag {{ 'on' if b.enabled else 'off' }}">{{ 'เปิด' if b.enabled else 'ปิด' }}</span></td>
+    <td>
+      <label class="switch">
+        <input type="checkbox" data-playbook="{{ b.name }}" {{ 'checked' if b.enabled else '' }} onchange="toggle(this)">
+        <span class="slider"></span>
+      </label>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<script>
+async function toggle(el) {
+  const res = await fetch(`/api/playbooks/${encodeURIComponent(el.dataset.playbook)}/toggle`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: el.checked})
+  });
+  const data = await res.json();
+  el.closest('tr').querySelectorAll('.tag')[1].textContent = data.enabled ? 'เปิด' : 'ปิด';
+}
+</script>
+{% endblock %}

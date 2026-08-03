@@ -1,0 +1,17 @@
+# T3 — Brute-force SSH/RDP (auto, stateful block with expiry)
+name: t3-bruteforce
+description: บรู๊ตฟอร์ซ SSH/RDP — บล็อก IP ต้นตออัตโนมัติ
+enabled: true
+gate: auto
+when:
+  pattern: 'brute|failed login|auth failure|5551|5712|60204|multiple.*attempts'
+steps:
+  - action: notify
+    params:
+      template: "⚠️ บรู๊ตฟอร์ซ: {title} จาก IP {src_ip} → กำลังบล็อก"
+  - action: block_ip
+    params:
+      ip_field: src_ip
+      duration: 600
+  - action: audit
+    params: {}

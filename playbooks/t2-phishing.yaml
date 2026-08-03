@@ -1,0 +1,19 @@
+# T2 — Phishing / LINE phishing IOC triage
+name: t2-phishing
+description: ฟิชชิง / ไลน์ฟิชชิง — ตรวจสอบ IOC แล้วแจ้งเตือน
+enabled: true
+gate: auto
+when:
+  pattern: 'phish|line.*scam|credential harvest|suspicious url|malicious link|fake login'
+steps:
+  - action: notify
+    params:
+      template: "⚠️ ฟิชชิง: {title} — URL: {url} ผู้ใช้: {user}"
+  - action: preserve_evidence
+    params: {}
+  - action: block_ip
+    params:
+      ip_field: src_ip
+      duration: 1800
+  - action: audit
+    params: {}

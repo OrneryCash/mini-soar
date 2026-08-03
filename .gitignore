@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Runtime data (SQLite audit DB — contains customer alert data)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Preserved evidence (alert JSON captures)
+evidence/
+
+# LINE token / secrets — NEVER commit real tokens
+.env
+*.env
+config.local.yaml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Coverage / testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker (if added later)
+docker-compose.override.yml

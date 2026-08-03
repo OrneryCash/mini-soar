@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}ประวัติการทำงาน{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:16px">ประวัติการทำงาน (Audit Log — รองรับ PDPA)</h2>
+<table>
+  <tr><th>#</th><th>เวลา</th><th>Alert</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td class="mono">{{ r.ts }}</td>
+    <td>{{ r.alert_id }}</td>
+    <td>{{ r.playbook }}</td>
+    <td>{{ r.action }}</td>
+    <td class="mono">{{ r.detail[:80] }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">ยังไม่มีประวัติ</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

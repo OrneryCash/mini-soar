@@ -1,0 +1,19 @@
+# T8 — Web shell / C2 beacon
+name: t8-webshell
+description: เว็บเชลล์ / การติดต่อ C2
+enabled: true
+gate: auto
+when:
+  pattern: 'webshell|web shell|\bc2\b|command and control|beacon|\.jsp|\.asp.*upload'
+steps:
+  - action: notify
+    params:
+      template: "🕸️ เว็บเชลล์/C2: {title} — IP {src_ip}"
+  - action: preserve_evidence
+    params: {}
+  - action: block_ip
+    params:
+      ip_field: src_ip
+      duration: 3600
+  - action: audit
+    params: {}

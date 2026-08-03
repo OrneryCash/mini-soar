@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}แดชบอร์ด{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:16px">แดชบอร์ด</h2>
+<div class="cards">
+  <div class="card"><div class="num">{{ total_alerts }}</div><div class="lbl">การแจ้งเตือนทั้งหมด</div></div>
+  <div class="card"><div class="num">{{ pending }}</div><div class="lbl">รอการอนุมัติ</div></div>
+  <div class="card"><div class="num">{{ active_blocks }}</div><div class="lbl">IP ที่ถูกบล็อก</div></div>
+</div>
+
+<h3 style="margin:20px 0 10px">การแจ้งเตือนล่าสุด</h3>
+<table>
+  <tr><th>#</th><th>เวลา</th><th>แหล่งที่มา</th><th>รายละเอียด</th><th>ความรุนแรง</th><th>เพลย์บุ๊ก</th></tr>
+  {% for a in alerts %}
+  <tr>
+    <td>{{ a.id }}</td>
+    <td class="mono">{{ a.ts[11:19] }}</td>
+    <td>{{ a.source }}</td>
+    <td>{{ a.title }}</td>
+    <td>{{ a.severity }}</td>
+    <td>{% for m in (a.matched_playbooks or '').split(',') if m %}<span class="pill">{{ m }}</span>{% endfor %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">ยังไม่มีการแจ้งเตือน — ส่ง alert ไปที่ <span class="mono">POST /webhook</span></td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

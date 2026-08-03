@@ -1,0 +1,13 @@
+# T9 — Agent killed / offline agent (ransomware precursor)
+name: t9-agent-killed
+description: เอเจนต์หยุดทำงาน — สัญญาณก่อนเกิดเหตุ
+enabled: true
+gate: human
+when:
+  pattern: 'agent.*(killed|disconnect|offline|stopped)|endpoint.*offline'
+steps:
+  - action: notify
+    params:
+      template: "📴 เอเจนต์หยุดทำงาน: {title} — โฮสต์ {host}"
+  - action: audit
+    params: {}

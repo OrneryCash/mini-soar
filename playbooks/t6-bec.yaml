@@ -1,0 +1,15 @@
+# T6 — BEC / invoice fraud
+name: t6-bec
+description: BEC / ปลอมแปลงอีเมลแจ้งหนี้
+enabled: true
+gate: auto
+when:
+  pattern: '\bbec\b|business email|invoice fraud|spoof|dmarc.*fail|payment.*change'
+steps:
+  - action: notify
+    params:
+      template: "💸 BEC: {title} — ผู้ส่ง/ผู้ใช้ {user}"
+  - action: preserve_evidence
+    params: {}
+  - action: audit
+    params: {}
