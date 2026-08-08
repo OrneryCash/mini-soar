@@ -187,6 +187,8 @@ def main() -> None:
     ap.add_argument("--siem", default=None,
                     help="one of: " + ", ".join(SIEMS) + " (default: all)")
     ap.add_argument("--url", default="http://localhost:8080/webhook")
+    ap.add_argument("--pace", type=float, default=0.15,
+                    help="seconds to wait between alerts (default 0.15; use ~3 for a narrated live demo)")
     args = ap.parse_args()
 
     siem_list = [args.siem] if args.siem in SIEMS else list(SIEMS)
@@ -205,7 +207,7 @@ def main() -> None:
         fmt = SIEMS[siem]
         for name in threat_list:
             send(args.url, siem, name, fmt(THREATS[name]))
-            time.sleep(0.15)
+            time.sleep(args.pace)
 
 
 if __name__ == "__main__":

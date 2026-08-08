@@ -1,29 +1,71 @@
 {% extends "base.html" %}
 {% block title %}รออนุมัติ{% endblock %}
 {% block content %}
-<h2 style="margin-bottom:16px">รายการรอการอนุมัติ</h2>
+<h2 style="margin-bottom:16px">รายการรอการอนุมัติ <span class="live" style="font-weight:400"><span class="live-dot"></span>อัปเดตอัตโนมัติ</span></h2>
+<div class="toolbar"><span class="live">รอการตัดสินใจ {{ rows|length }} รายการ</span></div>
 <table>
-  <tr><th>#</th><th>เวลา</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th><th>ตัดสินใจ</th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{{ r.id }}</td>
-    <td class="mono">{{ r.ts[11:19] }}</td>
-    <td>{{ r.playbook }}</td>
-    <td>{{ r.action }}</td>
-    <td>{{ r.summary or r.params }}</td>
-    <td>
-      <button class="btn btn-approve" onclick="decide({{ r.id }}, true)">✅ อนุมัติ</button>
-      <button class="btn btn-deny" onclick="decide({{ r.id }}, false)">❌ ปฏิเสธ</button>
-    </td>
-  </tr>
-  {% else %}
-  <tr><td colspan="6" class="empty">ไม่มีรายการรออนุมัติ</td></tr>
-  {% endfor %}
+  <thead>
+    <tr><th>#</th><th>เวลา</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th><th>ตัดสินใจ</th></tr>
+  </thead>
+  <tbody id="approval-rows">
+    {% for r in rows %}
+    <tr id="appr-{{ r.id }}">
+      <td>{{ r.id }}</td>
+      <td class="mono time" data-ts="{{ r.ts }}">{{ r.ts[11:19] }}</td>
+      <td>{{ r.playbook }}</td>
+      <td>{{ r.action }}</td>
+      <td>{{ r.summary or r.params }}</td>
+      <td>
+        <button class="btn btn-approve" onclick="decide({{ r.id }}, true)">✅ อนุมัติ</button>
+        <button class="btn btn-deny" onclick="decide({{ r.id }}, false)">❌ ปฏิเสธ</button>
+      </td>
+    </tr>
+    {% else %}
+    <tr id="empty-row"><td colspan="6" class="empty">ไม่มีรายการรออนุมัติ</td></tr>
+    {% endfor %}
+  </tbody>
 </table>
+
 <script>
-async function decide(id, approve) {
-  await fetch(`/api/approvals/${id}/${approve ? 'approve' : 'deny'}`, {method: 'POST'});
-  location.reload();
-}
+  convertTimes(false);
+
+  async function decide(id, approve) {
+    await fetch(`/api/approvals/${id}/${approve ? 'approve' : 'deny'}`, {method: 'POST'});
+    document.getElementById(`appr-${id}`)?.remove();
+    refreshApprovals();
+  }
+
+  async function refreshApprovals() {
+    try {
+      const res = await fetch('/api/approvals?status=pending');
+      const rows = await res.json();
+      const tbody = document.getElementById('approval-rows');
+      const empty = document.getElementById('empty-row');
+      if (!rows.length) {
+        if (empty) empty.style.display = '';
+        tbody.querySelectorAll('tr[id^="appr-"]').forEach(r => r.remove());
+        return;
+      }
+      if (empty) empty.remove();
+      const existing = new Set([...tbody.querySelectorAll('tr[id^="appr-"]')].map(r => r.id));
+      rows.forEach(r => {
+        if (existing.has(`appr-${r.id}`)) return;
+        const tr = document.createElement('tr');
+        tr.id = `appr-${r.id}`;
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td class="mono">${localTime(r.ts)}</td>
+          <td>${r.playbook}</td>
+          <td>${r.action}</td>
+          <td>${r.summary || r.params}</td>
+          <td>
+            <button class="btn btn-approve" onclick="decide(${r.id}, true)">✅ อนุมัติ</button>
+            <button class="btn btn-deny" onclick="decide(${r.id}, false)">❌ ปฏิเสธ</button>
+          </td>`;
+        tbody.prepend(tr);
+      });
+    } catch (e) { /* keep last state */ }
+  }
+  setInterval(refreshApprovals, 3000);
 </script>
 {% endblock %}

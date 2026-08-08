@@ -3,9 +3,13 @@
 # So the REVERSIBLE action (block source IP, stateful auto-expire) runs AUTO.
 # Only DISRUPTIVE actions (host isolation, clinical shutdown) are human-gated.
 name: t1-ransomware
-description: แรนซัมแวร์ — บล็อก IP อัตโนมัติ (ย้อนกลับได้) + เก็บหลักฐาน; แยกโฮสต์ต้องอนุมัติ
+description: แรนซัมแวร์ — บล็อก IP อัตโนมัติ (มีกำหนดหมดอายุ) + เก็บหลักฐาน; แยกโฮสต์ต้องรออนุมัติ
 enabled: true
 gate: auto
+locks:
+  # Safety envelope: host isolation can never be set to auto by the customer.
+  # The form shows แยกโฮสต์ as locked (🔒) and it stays ต้องอนุมัติ always.
+  isolate_host: human
 when:
   pattern: 'ransom|encrypt|mass file change|wannacry|lockbit|notpetya|\.encrypted|\.locked'
 steps:

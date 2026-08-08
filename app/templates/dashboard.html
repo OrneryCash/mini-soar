@@ -3,25 +3,63 @@
 {% block content %}
 <h2 style="margin-bottom:16px">แดชบอร์ด</h2>
 <div class="cards">
-  <div class="card"><div class="num">{{ total_alerts }}</div><div class="lbl">การแจ้งเตือนทั้งหมด</div></div>
-  <div class="card"><div class="num">{{ pending }}</div><div class="lbl">รอการอนุมัติ</div></div>
-  <div class="card"><div class="num">{{ active_blocks }}</div><div class="lbl">IP ที่ถูกบล็อก</div></div>
+  <div class="card"><div class="num" id="c-alerts">{{ total_alerts }}</div><div class="lbl">การแจ้งเตือนทั้งหมด</div></div>
+  <div class="card"><div class="num" id="c-pending">{{ pending }}</div><div class="lbl">รอการอนุมัติ</div></div>
+  <div class="card"><div class="num" id="c-blocks">{{ active_blocks }}</div><div class="lbl">IP ที่ถูกบล็อก</div></div>
 </div>
 
-<h3 style="margin:20px 0 10px">การแจ้งเตือนล่าสุด</h3>
+<h3 style="margin:20px 0 10px">การแจ้งเตือนล่าสุด <span class="live" style="font-weight:400"><span class="live-dot"></span>อัปเดตอัตโนมัติทุก 3 วินาที</span></h3>
 <table>
-  <tr><th>#</th><th>เวลา</th><th>แหล่งที่มา</th><th>รายละเอียด</th><th>ความรุนแรง</th><th>เพลย์บุ๊ก</th></tr>
-  {% for a in alerts %}
-  <tr>
-    <td>{{ a.id }}</td>
-    <td class="mono">{{ a.ts[11:19] }}</td>
-    <td>{{ a.source }}</td>
-    <td>{{ a.title }}</td>
-    <td>{{ a.severity }}</td>
-    <td>{% for m in (a.matched_playbooks or '').split(',') if m %}<span class="pill">{{ m }}</span>{% endfor %}</td>
-  </tr>
-  {% else %}
-  <tr><td colspan="6" class="empty">ยังไม่มีการแจ้งเตือน — ส่ง alert ไปที่ <span class="mono">POST /webhook</span></td></tr>
-  {% endfor %}
+  <thead>
+    <tr><th>#</th><th>เวลา</th><th>SIEM</th><th>แหล่งที่มา</th><th>รายละเอียด</th><th>ความรุนแรง</th><th>เพลย์บุ๊ก</th></tr>
+  </thead>
+  <tbody id="alert-rows">
+    {% for a in alerts %}
+    <tr>
+      <td>{{ a.id }}</td>
+      <td class="mono time" data-ts="{{ a.ts }}">{{ a.ts[11:19] }}</td>
+      <td><span class="siem">{{ a.siem or 'generic' }}</span></td>
+      <td>{{ a.source }}</td>
+      <td>{{ a.title }}</td>
+      <td><span class="sev {{ 'crit' if a.severity >= 13 else 'high' if a.severity >= 10 else 'med' if a.severity >= 6 else 'low' }}">{{ 'วิกฤต' if a.severity >= 13 else 'สูง' if a.severity >= 10 else 'กลาง' if a.severity >= 6 else 'ต่ำ' }}</span></td>
+      <td>{% for m in (a.matched_playbooks or '').split(',') if m %}<span class="pill">{{ m }}</span>{% endfor %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">ยังไม่มีการแจ้งเตือน — ส่ง alert ไปที่ <span class="mono">POST /webhook</span></td></tr>
+    {% endfor %}
+  </tbody>
 </table>
+
+<script>
+  convertTimes(false);
+
+  // Live refresh: fetch latest alerts + counters every 3s
+  async function refreshDashboard() {
+    try {
+      const [alertsRes, statsRes] = await Promise.all([
+        fetch('/api/alerts?limit=20'), fetch('/api/stats')
+      ]);
+      const alerts = await alertsRes.json();
+      const stats = await statsRes.json();
+      document.getElementById('c-alerts').textContent = stats.total_alerts;
+      document.getElementById('c-pending').textContent = stats.pending;
+      document.getElementById('c-blocks').textContent = stats.active_blocks;
+      const tbody = document.getElementById('alert-rows');
+      if (!alerts.length) return;
+      const pills = (m) => (m || '').split(',').filter(Boolean)
+        .map(x => `<span class="pill">${x}</span>`).join('');
+      tbody.innerHTML = alerts.map(a => `
+        <tr>
+          <td>${a.id}</td>
+          <td class="mono">${localTime(a.ts)}</td>
+          <td><span class="siem">${a.siem || 'generic'}</span></td>
+          <td>${a.source}</td>
+          <td>${a.title}</td>
+          <td>${sevBadge(a.severity)}</td>
+          <td>${pills(a.matched_playbooks)}</td>
+        </tr>`).join('');
+    } catch (e) { /* keep last state */ }
+  }
+  setInterval(refreshDashboard, 3000);
+</script>
 {% endblock %}

@@ -15,7 +15,7 @@ ANY SIEM (Wazuh, Elastic, Splunk, QRadar, ...)
    ▼
 POST /webhook ──► rules engine (playbooks/*.yaml, hot-reload)
                      │
-                     ├─ LINE notify (Thai)          [line_token optional]
+                     ├─ LINE notify (Thai)          [line_channel_token optional]
                      ├─ block IP (stateful, expiry) [simulated | iptables]
                      ├─ preserve evidence (JSON)    [evidence/]
                      └─ audit log (SQLite)          [data/minisoar.db]
@@ -59,14 +59,25 @@ canonical namespace — that's what makes Mini-SOAR SIEM-agnostic.
 
 ## Demo flow (3 minutes)
 
-1. `python demo/send_alerts.py brute` → webhook receives it, T3 playbook
+```bash
+./demo/reset_db.sh        # fresh DB (alert IDs start at 1) + restart server
+python3 demo/send_alerts.py --pace 1.5   # --pace = seconds between alerts (live narration)
+```
+
+1. `python3 demo/send_alerts.py brute` → webhook receives it, T3 playbook
    matches → LINE alert (simulated) + IP blocked (stateful, 600s) → audit rows.
-2. `python demo/send_alerts.py ransomware` → T1 is **human-gated** → alert goes
+2. `python3 demo/send_alerts.py ransomware` → T1 is **human-gated** → alert goes
    to the approvals queue instead of auto-blocking.
 3. Open `http://localhost:8080/approvals` → click **อนุมัติ** → block executes.
 4. Open `/playbooks` → flip a playbook OFF → resend its alert → nothing happens
    (the non-technical admin controls everything with switches).
 5. `/audit` shows the full PDPA-ready log of every alert + action.
+
+> ⏰ The approval time-box (60s default) is enforced by the UI's live polling —
+> an unanswered approval auto-executes or escalates while you watch. Approve
+> within the window during the live demo, or tell that story deliberately.
+
+Full narrated walkthrough (what to say, what to click): **`demo/demo-script.md`**.
 
 ## Playbook format (provider layer — customers never touch this)
 
@@ -108,14 +119,32 @@ sleeping through a ransomware alert still gets a bounded, safe response.
 ## Customization boundary
 
 - **Customer admin (non-technical):** Thai web UI — toggles, switches, approve
-  buttons. No YAML, no code.
+  buttons, **and a full Thai playbook edit/create form** (keyword chips, IP
+  whitelist, block duration, LINE template, action checkboxes, dry-run test,
+  revert). No YAML, no code.
 - **Provider (us):** author/edit playbooks, tune patterns, per-customer rules.
+  **YAML files are the single source of truth** — the form writes playbooks
+  straight to `playbooks/*.yaml` (same structure the engine parses). SQLite
+  keeps only runtime data + an undo log for ย้อนกลับ (เวอร์ชันก่อนหน้า) (last 10
+  versions).
+- **Safety envelope:** host isolation is ALWAYS human-gated (locked), whatever
+  the customer picks.
+- **Tradeoff:** a provider update that replaces a YAML file overwrites customer
+  edits to it — the undo log preserves the previous version, and updates ship
+  as new files or diffs.
+
+## Deep links
+
+- `#edit-<name>` — open the edit modal for a playbook (e.g. `/playbooks#edit-t3-bruteforce`)
+- `?test=<name>` — open the edit modal with the dry-run preview already rendered
+  (e.g. `/playbooks?test=t3-bruteforce`)
 
 ## Configuration (config.yaml)
 
 | Key | Meaning |
 |---|---|
-| `line_token` | LINE Notify token — empty = simulated notifications |
+| `line_channel_token` | LINE Messaging API channel access token (LINE Notify EOL 2025-03-31) — empty = simulated notifications |
+| `line_target_user_id` | LINE user ID of the recipient (LINE Official Account's Messaging API) |
 | `firewall_backend` | `simulated` (safe demo) or `iptables` (Linux real block) |
 | `block_default_duration` | stateful block expiry seconds |
 | `approval_timeout_seconds` | human-gate time-box (0 = wait forever) |

@@ -2,19 +2,38 @@
 {% block title %}ประวัติการทำงาน{% endblock %}
 {% block content %}
 <h2 style="margin-bottom:16px">ประวัติการทำงาน (Audit Log — รองรับ PDPA)</h2>
+<div class="toolbar">
+  <input class="filter" id="audit-filter" type="search" placeholder="🔍 ค้นหา: เพลย์บุ๊ก, การกระทำ, IP, alert…">
+  <span class="live">ทั้งหมด {{ rows|length }} รายการ (แสดงล่าสุด 100)</span>
+</div>
 <table>
-  <tr><th>#</th><th>เวลา</th><th>Alert</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{{ r.id }}</td>
-    <td class="mono">{{ r.ts }}</td>
-    <td>{{ r.alert_id }}</td>
-    <td>{{ r.playbook }}</td>
-    <td>{{ r.action }}</td>
-    <td class="mono">{{ r.detail[:80] }}</td>
-  </tr>
-  {% else %}
-  <tr><td colspan="6" class="empty">ยังไม่มีประวัติ</td></tr>
-  {% endfor %}
+  <thead>
+    <tr><th>#</th><th>เวลา</th><th>Alert</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th></tr>
+  </thead>
+  <tbody id="audit-rows">
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td class="mono time nowrap" data-ts="{{ r.ts }}">{{ r.ts }}</td>
+      <td class="nowrap">{{ r.alert_id }}</td>
+      <td class="nowrap">{{ r.playbook }}</td>
+      <td class="nowrap">{{ r.action }}</td>
+      <td class="mono" title="{{ r.detail }}">{{ r.human_detail }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">ยังไม่มีประวัติ</td></tr>
+    {% endfor %}
+  </tbody>
 </table>
+
+<script>
+  convertTimes(true);
+  const filterEl = document.getElementById('audit-filter');
+  filterEl.addEventListener('input', () => {
+    const q = filterEl.value.trim().toLowerCase();
+    document.querySelectorAll('#audit-rows tr').forEach(tr => {
+      tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+</script>
 {% endblock %}

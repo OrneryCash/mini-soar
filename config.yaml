@@ -13,10 +13,13 @@ db_path: data/minisoar.db
 # Evidence preservation folder
 evidence_dir: evidence
 
-# LINE Notify token (optional). If empty, notifications are simulated
-# (logged + shown in UI) so the demo works without a token.
-line_token: ""
-line_notify_url: "https://notify-api.line.me/api/notify"
+# LINE Messaging API (LINE Notify was discontinued 2025-03-31 — dead endpoint).
+# Create a LINE Official Account → Messaging API channel → get channel access token
+# + the recipient's user ID (LINE Notify-style per-user tokens no longer exist).
+# Empty token/user-id = notifications are simulated (logged + shown in UI)
+# so the demo works without a LINE account.
+line_channel_token: ""
+line_target_user_id: ""
 
 # Firewall backend: "simulated" (safe demo, no real blocking)
 # or "iptables" (Linux only, real stateful block with auto-expiry)

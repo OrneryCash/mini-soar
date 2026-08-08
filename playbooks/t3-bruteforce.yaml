@@ -1,17 +1,25 @@
-# T3 — Brute-force SSH/RDP (auto, stateful block with expiry)
+# Mini-SOAR playbook — แก้ไขผ่านฟอร์มภาษาไทย (Thai UI)
+# แก้ไขแต่ละครั้งจะบันทึกเป็น YAML ไฟล์โดยตรง — single source of truth
 name: t3-bruteforce
-description: บรู๊ตฟอร์ซ SSH/RDP — บล็อก IP ต้นตออัตโนมัติ
+description: บรู๊ตฟอร์ซ SSH/RDP — บล็อก IP 30 นาที + ยกเว้น IP เครื่องภายใน (แก้ไขโดยลูกค้า)
 enabled: true
 gate: auto
 when:
-  pattern: 'brute|failed login|auth failure|5551|5712|60204|multiple.*attempts'
+  pattern: (brute|failed\ login|ssh|rdp)
+  keywords:
+  - brute
+  - failed login
+  - ssh
+  - rdp
+  not_ip:
+  - 10.99.99.99
 steps:
-  - action: notify
-    params:
-      template: "⚠️ บรู๊ตฟอร์ซ: {title} จาก IP {src_ip} → กำลังบล็อก"
-  - action: block_ip
-    params:
-      ip_field: src_ip
-      duration: 600
-  - action: audit
-    params: {}
+- action: notify
+  params:
+    template: '⚠️ บรู๊ตฟอร์ซ: {title} จาก IP {src_ip}'
+- action: block_ip
+  params:
+    ip_field: src_ip
+    duration: 1800
+- action: audit
+  params: {}

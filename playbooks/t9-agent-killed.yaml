@@ -1,6 +1,6 @@
 # T9 — Agent killed / offline agent (ransomware precursor)
 name: t9-agent-killed
-description: เอเจนต์หยุดทำงาน — สัญญาณก่อนเกิดเหตุ
+description: เอเจนต์หยุดทำงาน — สัญญาณเตือนก่อนเกิดเหตุ
 enabled: true
 gate: human
 when:
