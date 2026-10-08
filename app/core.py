@@ -40,8 +40,13 @@ CONFIG = load_config()
 def db_conn() -> sqlite3.Connection:
     db_path = BASE / CONFIG.get("data_dir", "data") / "minisoar.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    # timeout = how long to wait for a locked DB before raising.
+    conn = sqlite3.connect(db_path, timeout=5)
     conn.row_factory = sqlite3.Row
+    # WAL: readers don't block the single writer (essential once handlers run
+    # concurrently in a threadpool). busy_timeout: wait instead of erroring.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -475,13 +480,34 @@ def action_evidence(fields: dict, alert: dict, alert_id: int, playbook: str) -> 
 # Rules engine — declarative YAML playbooks, hot-reload
 # --------------------------------------------------------------------------
 
+_PB_CACHE: dict = {"sig": None, "books": []}
+
+
+def _playbooks_signature(pdir) -> tuple:
+    """Cheap fingerprint of the playbook dir — re-hash only when a file changes."""
+    sig = []
+    for path in sorted(pdir.glob("*.yaml")):
+        if path.name.endswith(".tmp"):
+            continue
+        try:
+            st = path.stat()
+            sig.append((path.name, st.st_mtime_ns, st.st_size))
+        except OSError:
+            pass
+    return tuple(sig)
+
+
 def load_playbooks() -> list[dict]:
     """Parse every playbooks/*.yaml file — YAML files are the single source of
-    truth. Hot-reloaded on every alert (no caching, no merge layer)."""
+    truth. Cached by file mtime/size, so it is reloaded only when a playbook
+    actually changes (hot reload preserved, per-request disk+YAML cost removed)."""
     pdir = BASE / CONFIG.get("playbooks_dir", "playbooks")
-    books = []
     if not pdir.exists():
-        return books
+        return []
+    sig = _playbooks_signature(pdir)
+    if _PB_CACHE["sig"] == sig:
+        return _PB_CACHE["books"]
+    books = []
     for path in sorted(pdir.glob("*.yaml")):
         if path.name.endswith(".tmp"):
             continue
@@ -495,6 +521,8 @@ def load_playbooks() -> list[dict]:
         data["_file"] = path.name
         data["_custom"] = data.get("source") == "custom"
         books.append(data)
+    _PB_CACHE["sig"] = sig
+    _PB_CACHE["books"] = books
     return books
 
 

@@ -2,7 +2,7 @@
 name: t8-webshell
 description: เว็บเชลล์ / การติดต่อ C2
 enabled: true
-gate: auto
+gate: human
 when:
   pattern: 'webshell|web shell|\bc2\b|command and control|beacon|\.jsp|\.asp.*upload'
 steps:
@@ -12,6 +12,7 @@ steps:
   - action: preserve_evidence
     params: {}
   - action: block_ip
+    gate: human
     params:
       ip_field: src_ip
       duration: 3600

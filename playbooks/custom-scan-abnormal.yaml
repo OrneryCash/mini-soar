@@ -1,9 +1,9 @@
 # Mini-SOAR playbook — แก้ไขผ่านฟอร์มภาษาไทย (Thai UI)
 # แก้ไขแต่ละครั้งจะบันทึกเป็น YAML ไฟล์โดยตรง — single source of truth
 name: custom-scan-abnormal
-description: ตรวจจับการสแกนพอร์ตผิดปกติ — บล็อก IP อัตโนมัติ
+description: ตรวจจับการสแกนพอร์ตผิดปกติ — ขออนุมัติบล็อก IP
 enabled: true
-gate: auto
+gate: human
 when:
   pattern: (port\ scan|nmap|masscan)
   keywords:
@@ -17,6 +17,7 @@ steps:
   params:
     template: '🔎 พบการสแกน: {title} จาก {src_ip}'
 - action: block_ip
+  gate: human
   params:
     ip_field: src_ip
     duration: 600

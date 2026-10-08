@@ -1,11 +1,13 @@
 # T1 — Ransomware / encryption pattern
-# DESIGN: ransomware moves in minutes — waiting for human approval is TOO LATE.
-# So the REVERSIBLE action (block source IP, stateful auto-expire) runs AUTO.
-# Only DISRUPTIVE actions (host isolation, clinical shutdown) are human-gated.
+# DESIGN: containment is a disruptive action — a wrong auto-block can cut off a
+# legitimate host/device (especially in a hospital). So block_ip QUEUES for
+# human approval (one click) instead of running unattended. notify + evidence
+# still run automatically (safe, reversible); the approval is time-boxed by
+# approval_timeout_seconds so it never waits forever.
 name: t1-ransomware
-description: แรนซัมแวร์ — บล็อก IP อัตโนมัติ (มีกำหนดหมดอายุ) + เก็บหลักฐาน; แยกโฮสต์ต้องรออนุมัติ
+description: แรนซัมแวร์ — เก็บหลักฐาน + ขออนุมัติบล็อก IP (มีกำหนดหมดอายุ) และแยกโฮสต์
 enabled: true
-gate: auto
+gate: human
 locks:
   # Safety envelope: host isolation can never be set to auto by the customer.
   # The form shows แยกโฮสต์ as locked (🔒) and it stays ต้องอนุมัติ always.
@@ -22,7 +24,7 @@ steps:
     params:
       ip_field: src_ip
       duration: 3600
-    gate: auto            # reversible → no approval wait
+    gate: human           # containment → human approval (design review)
   - action: isolate_host   # disruptive → human decides (example of the boundary)
     params:
       host_field: host

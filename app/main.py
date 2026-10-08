@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 import core
 
@@ -50,7 +51,9 @@ async def webhook(request: Request) -> JSONResponse:
         return JSONResponse({"error": "invalid JSON"}, status_code=400)
     if not isinstance(alert, dict):
         return JSONResponse({"error": "expected JSON object"}, status_code=400)
-    result = core.process_alert(alert)
+    # Offload the blocking work (sqlite, YAML parse, HTTP notify, iptables) to a
+    # worker thread so it does NOT block the asyncio event loop.
+    result = await run_in_threadpool(core.process_alert, alert)
     return JSONResponse(result)
 
 
@@ -59,7 +62,7 @@ async def webhook(request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse:
+def dashboard(request: Request) -> HTMLResponse:
     with core.db_conn() as conn:
         alerts = conn.execute(
             "SELECT * FROM alerts ORDER BY id DESC LIMIT 20"
@@ -90,7 +93,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 
 
 @app.get("/playbooks", response_class=HTMLResponse)
-async def playbooks_page(request: Request) -> HTMLResponse:
+def playbooks_page(request: Request) -> HTMLResponse:
     books = core.load_playbooks()
     rows = []
     for b in books:
@@ -121,7 +124,7 @@ async def playbooks_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/approvals", response_class=HTMLResponse)
-async def approvals_page(request: Request) -> HTMLResponse:
+def approvals_page(request: Request) -> HTMLResponse:
     with core.db_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM approvals WHERE status='pending' ORDER BY id DESC LIMIT 50"
@@ -130,7 +133,7 @@ async def approvals_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/audit", response_class=HTMLResponse)
-async def audit_page(request: Request) -> HTMLResponse:
+def audit_page(request: Request) -> HTMLResponse:
     with core.db_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM actions ORDER BY id DESC LIMIT 100"
@@ -146,7 +149,7 @@ async def audit_page(request: Request) -> HTMLResponse:
 @app.post("/api/playbooks/{name}/toggle")
 async def toggle_playbook(name: str, request: Request) -> JSONResponse:
     body = await request.json()
-    core._set_state(name, bool(body.get("enabled", True)))
+    await run_in_threadpool(core._set_state, name, bool(body.get("enabled", True)))
     return JSONResponse({"name": name, "enabled": body.get("enabled", True)})
 
 
@@ -155,7 +158,7 @@ async def toggle_playbook(name: str, request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------
 
 @app.get("/api/playbooks")
-async def api_playbooks_list() -> JSONResponse:
+def api_playbooks_list() -> JSONResponse:
     books = core.load_playbooks()
     return JSONResponse([
         {k: b.get(k) for k in ("name", "description", "gate", "enabled", "_custom")}
@@ -164,7 +167,7 @@ async def api_playbooks_list() -> JSONResponse:
 
 
 @app.get("/api/playbooks/{name}")
-async def api_playbook_get(name: str) -> JSONResponse:
+def api_playbook_get(name: str) -> JSONResponse:
     book = core.get_playbook(name)
     if not book:
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -174,7 +177,7 @@ async def api_playbook_get(name: str) -> JSONResponse:
 @app.put("/api/playbooks/{name}")
 async def api_playbook_put(name: str, request: Request) -> JSONResponse:
     body = await request.json()
-    result = core.save_playbook_form(name, body)
+    result = await run_in_threadpool(core.save_playbook_form, name, body)
     if not result["ok"]:
         return JSONResponse({"error": result["errors"]}, status_code=400)
     return JSONResponse(core.playbook_form_payload(result["playbook"]))
@@ -184,7 +187,7 @@ async def api_playbook_put(name: str, request: Request) -> JSONResponse:
 async def api_playbook_create(request: Request) -> JSONResponse:
     body = await request.json()
     name = str(body.get("name", "") or "").strip()
-    result = core.save_playbook_form(name, body)
+    result = await run_in_threadpool(core.save_playbook_form, name, body)
     if not result["ok"]:
         return JSONResponse({"error": result["errors"]}, status_code=400)
     return JSONResponse(core.playbook_form_payload(result["playbook"]))
@@ -211,7 +214,7 @@ async def api_playbook_test(name: str, request: Request) -> JSONResponse:
 
 
 @app.post("/api/playbooks/{name}/revert")
-async def api_playbook_revert(name: str) -> JSONResponse:
+def api_playbook_revert(name: str) -> JSONResponse:
     result = core.revert_playbook(name)
     if not result["ok"]:
         return JSONResponse({"error": result["error"]}, status_code=400)
@@ -219,7 +222,7 @@ async def api_playbook_revert(name: str) -> JSONResponse:
 
 
 @app.delete("/api/playbooks/{name}")
-async def api_playbook_delete(name: str) -> JSONResponse:
+def api_playbook_delete(name: str) -> JSONResponse:
     result = core.delete_playbook(name)
     if not result["ok"]:
         return JSONResponse({"error": result["error"]}, status_code=400)
@@ -227,31 +230,31 @@ async def api_playbook_delete(name: str) -> JSONResponse:
 
 
 @app.post("/api/approvals/{approval_id}/approve")
-async def approve_action(approval_id: int) -> JSONResponse:
+def approve_action(approval_id: int) -> JSONResponse:
     return JSONResponse(core.approve(approval_id, True))
 
 
 @app.post("/api/approvals/{approval_id}/deny")
-async def deny_action(approval_id: int) -> JSONResponse:
+def deny_action(approval_id: int) -> JSONResponse:
     return JSONResponse(core.approve(approval_id, False))
 
 
 @app.get("/api/alerts")
-async def api_alerts(limit: int = 20) -> JSONResponse:
+def api_alerts(limit: int = 20) -> JSONResponse:
     with core.db_conn() as conn:
         rows = conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return JSONResponse([dict(r) for r in rows])
 
 
 @app.get("/api/actions")
-async def api_actions(limit: int = 50) -> JSONResponse:
+def api_actions(limit: int = 50) -> JSONResponse:
     with core.db_conn() as conn:
         rows = conn.execute("SELECT * FROM actions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return JSONResponse([dict(r) for r in rows])
 
 
 @app.get("/api/approvals")
-async def api_approvals(limit: int = 50, status: str = "") -> JSONResponse:
+def api_approvals(limit: int = 50, status: str = "") -> JSONResponse:
     core.check_expired_approvals()  # keep the queue truthful to the time-box
     with core.db_conn() as conn:
         if status:
@@ -267,7 +270,7 @@ async def api_approvals(limit: int = 50, status: str = "") -> JSONResponse:
 
 
 @app.get("/api/stats")
-async def api_stats() -> JSONResponse:
+def api_stats() -> JSONResponse:
     """Live counters for the UI's auto-refresh (badge + cards)."""
     core.check_expired_approvals()
     with core.db_conn() as conn:

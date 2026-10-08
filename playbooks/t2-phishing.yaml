@@ -3,7 +3,7 @@
 name: t2-phishing
 description: ฟิชชิง / ไลน์ฟิชชิง — ตรวจสอบ IOC แล้วแจ้งเตือน
 enabled: true
-gate: auto
+gate: human
 when:
   pattern: phish|line.*scam|credential harvest|suspicious url|malicious link|fake login
 steps:
@@ -13,6 +13,7 @@ steps:
 - action: preserve_evidence
   params: {}
 - action: block_ip
+  gate: human
   params:
     ip_field: src_ip
     duration: 1800
