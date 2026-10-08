@@ -265,7 +265,7 @@ func handlePlaybooksPage(w http.ResponseWriter, r *http.Request) {
 func testName2(r *http.Request) string { return r.URL.Query().Get("test") }
 
 func handleApprovalsPage(w http.ResponseWriter, r *http.Request) {
-	rows, _ := db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status FROM approvals WHERE status='pending' ORDER BY id DESC LIMIT 50")
+	rows, _ := db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status, ifnull(count,1) FROM approvals WHERE status='pending' ORDER BY id DESC LIMIT 50")
 	d := ApprovalsData{Rows: []Approval{}}
 	if rows != nil {
 		defer rows.Close()
@@ -430,9 +430,9 @@ func handleAPIApprovals(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	var rows *sql.Rows
 	if status != "" {
-		rows, _ = db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status FROM approvals WHERE status=? ORDER BY id DESC LIMIT ?", status, limit)
+		rows, _ = db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status, ifnull(count,1) FROM approvals WHERE status=? ORDER BY id DESC LIMIT ?", status, limit)
 	} else {
-		rows, _ = db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status FROM approvals ORDER BY id DESC LIMIT ?", limit)
+		rows, _ = db.Query("SELECT id, ts, alert_id, playbook, action, params, summary, status, ifnull(count,1) FROM approvals ORDER BY id DESC LIMIT ?", limit)
 	}
 	out := []map[string]interface{}{}
 	if rows != nil {
@@ -440,7 +440,7 @@ func handleAPIApprovals(w http.ResponseWriter, r *http.Request) {
 		for _, a := range scanApprovals(rows) {
 			out = append(out, map[string]interface{}{"id": a.ID, "ts": a.Ts, "alert_id": a.AlertID,
 				"playbook": a.Playbook, "action": a.Action, "params": a.Params,
-				"summary": a.Summary, "status": a.Status})
+				"summary": a.Summary, "status": a.Status, "count": a.Count})
 		}
 	}
 	writeJSON(w, 200, out)

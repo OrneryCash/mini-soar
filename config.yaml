@@ -28,11 +28,13 @@ firewall_backend: simulated
 # Block expiry seconds (stateful: blocks auto-expire)
 block_default_duration: 600
 
-# Human-gate time-box: if an approval is unanswered after this many seconds,
-# auto-execute the action (auto_execute) or escalate loudly (escalate).
-# Ransomware-style threats must not wait forever on a one-man SOC.
+# Human-gate time-box.
+#   hold          = wait for a person indefinitely (recommended: containment is human-gated)
+#   escalate      = after N seconds, mark it escalated and notify loudly
+#   auto_execute  = after N seconds, perform the action WITHOUT approval (NOT recommended —
+#                   it defeats the human gate and will fire on false positives)
 approval_timeout_seconds: 60
-approval_timeout_action: auto_execute
+approval_timeout_action: hold
 
 # Accept alerts from any SIEM; optional shared secret check
 webhook_secret: ""

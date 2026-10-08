@@ -66,7 +66,7 @@ func loadConfig() Config {
 		c.BlockDefault = 600
 	}
 	if c.ApprovalMode == "" {
-		c.ApprovalMode = "escalate"
+		c.ApprovalMode = "hold"
 	}
 	return c
 }
@@ -107,12 +107,14 @@ func initDB() error {
 	_, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, source TEXT, title TEXT, severity INTEGER DEFAULT 0, raw TEXT NOT NULL, matched_playbooks TEXT);
 CREATE TABLE IF NOT EXISTS actions (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, alert_id INTEGER, playbook TEXT, action TEXT, detail TEXT, status TEXT DEFAULT 'executed');
-CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, alert_id INTEGER, playbook TEXT, action TEXT, params TEXT, summary TEXT, status TEXT DEFAULT 'pending');
+CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, alert_id INTEGER, playbook TEXT, action TEXT, params TEXT, summary TEXT, status TEXT DEFAULT 'pending', count INTEGER DEFAULT 1);
 CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, ip TEXT NOT NULL, duration INTEGER, expires_at TEXT, backend TEXT, status TEXT DEFAULT 'active');
 CREATE TABLE IF NOT EXISTS playbook_history (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, data TEXT NOT NULL, ts TEXT NOT NULL);`)
 	if err != nil {
 		return err
 	}
+	// migration: aggregation counter for DBs created before fix #3
+	_, _ = db.Exec("ALTER TABLE approvals ADD COLUMN count INTEGER DEFAULT 1")
 	var n int
 	_ = db.QueryRow("SELECT count(*) FROM pragma_table_info('alerts') WHERE name='siem'").Scan(&n)
 	if n == 0 {
@@ -158,9 +160,10 @@ type Action struct {
 }
 
 type Approval struct {
-	ID, AlertID                     int64
-	Ts, Playbook, Action, Params    string
-	Summary, Status                 string
+	ID, AlertID                  int64
+	Ts, Playbook, Action, Params string
+	Summary, Status              string
+	Count                        int64
 }
 
 type Block struct {
@@ -201,7 +204,7 @@ func scanApprovals(rows *sql.Rows) []Approval {
 	for rows.Next() {
 		var a Approval
 		var sum sql.NullString
-		if err := rows.Scan(&a.ID, &a.Ts, &a.AlertID, &a.Playbook, &a.Action, &a.Params, &sum, &a.Status); err != nil {
+		if err := rows.Scan(&a.ID, &a.Ts, &a.AlertID, &a.Playbook, &a.Action, &a.Params, &sum, &a.Status, &a.Count); err != nil {
 			continue
 		}
 		a.Summary = sum.String
@@ -1284,6 +1287,15 @@ func resolveApprovalSummary(action string, params map[string]interface{}, fields
 
 func queueApproval(action string, params map[string]interface{}, fields map[string]interface{}, alertID int64, playbook string) int64 {
 	summary := resolveApprovalSummary(action, params, fields)
+	if summary != "" {
+		var existing int64
+		var cnt int64
+		if err := db.QueryRow("SELECT id, ifnull(count,1) FROM approvals WHERE status='pending' AND playbook=? AND action=? AND summary=? ORDER BY id LIMIT 1", playbook, action, summary).Scan(&existing, &cnt); err == nil && existing > 0 {
+			// aggregation: one open request per (playbook, action, target)
+			_, _ = db.Exec("UPDATE approvals SET count=?, ts=? WHERE id=?", cnt+1, nowISO(), existing)
+			return existing
+		}
+	}
 	pj, _ := json.Marshal(params)
 	id, _ := auditInsert("approvals", map[string]interface{}{
 		"ts": nowISO(), "alert_id": alertID, "playbook": playbook,
@@ -1386,6 +1398,10 @@ func checkExpiredApprovals() []map[string]interface{} {
 				fields = extractFields(alert)
 			}
 		}
+		if mode == "hold" {
+			// hold: containment waits for a human, indefinitely
+			continue
+		}
 		if mode == "auto_execute" {
 			var res map[string]interface{}
 			switch row.Action {
@@ -1449,7 +1465,7 @@ func approve(approvalID int64, decision bool) map[string]interface{} {
 	if row.Status != "pending" {
 		return map[string]interface{}{"error": "already " + row.Status}
 	}
-	if CONFIG.ApprovalTO > 0 {
+	if CONFIG.ApprovalTO > 0 && CONFIG.ApprovalMode != "hold" {
 		if created, err := parseISO(row.Ts); err == nil {
 			if time.Since(created) > time.Duration(CONFIG.ApprovalTO)*time.Second {
 				return map[string]interface{}{"error": "approval expired — timeout policy applies",

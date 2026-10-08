@@ -13,7 +13,7 @@
       <td class="mono time" data-ts="{{.Ts}}">{{.Ts}}</td>
       <td>{{.Playbook}}</td>
       <td>{{.Action}}</td>
-      <td>{{if .Summary}}{{.Summary}}{{else}}{{.Params}}{{end}}</td>
+      <td>{{if .Summary}}{{.Summary}}{{else}}{{.Params}}{{end}}{{if gt .Count 1}} <span class="badge">×{{.Count}}</span>{{end}}</td>
       <td>
         <button class="btn btn-approve" onclick="decide({{.ID}}, true)">✅ อนุมัติ</button>
         <button class="btn btn-deny" onclick="decide({{.ID}}, false)">❌ ปฏิเสธ</button>
@@ -56,7 +56,7 @@
           <td class="mono">${localTime(r.ts)}</td>
           <td>${r.playbook}</td>
           <td>${r.action}</td>
-          <td>${r.summary || r.params}</td>
+          <td>${r.summary || r.params}${(r.count||1) > 1 ? ' <span class="badge">×' + r.count + '</span>' : ''}</td>
           <td>
             <button class="btn btn-approve" onclick="decide(${r.id}, true)">✅ อนุมัติ</button>
             <button class="btn btn-deny" onclick="decide(${r.id}, false)">❌ ปฏิเสธ</button>
