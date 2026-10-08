@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mini-SOAR — {% block title %}แดชบอร์ด{% endblock %}</title>
+  <title>Mini-SOAR — {{template "title" .}}</title>
   <script>
     // Shared helpers — defined in <head> so page scripts (which run before
     // the end-of-body script) can use them.
@@ -152,7 +152,7 @@
     <span class="live" style="margin-left:auto"><span class="live-dot"></span>ระบบออนไลน์</span>
   </header>
   <main>
-    {% block content %}{% endblock %}
+    {{template "content" .}}
   </main>
   <script>
     // Highlight the current page in the nav

@@ -46,3 +46,7 @@ htmlcov/
 
 # Docker (if added later)
 docker-compose.override.yml
+
+# Go build output
+/minisoar-go
+*.test

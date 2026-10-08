@@ -1,8 +1,0 @@
-# Mini-SOAR — Lightweight SIEM-Agnostic Automated Security Response Service
-# PoC build for Course 261491 (Thai small hospitals/clinics/SMEs)
-
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pyyaml>=6.0
-jinja2>=3.1
-requests>=2.31

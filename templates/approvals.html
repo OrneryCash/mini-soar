@@ -1,28 +1,27 @@
-{% extends "base.html" %}
-{% block title %}รออนุมัติ{% endblock %}
-{% block content %}
+{{define "title"}}รออนุมัติ{{end}}
+{{define "content"}}
 <h2 style="margin-bottom:16px">รายการรอการอนุมัติ <span class="live" style="font-weight:400"><span class="live-dot"></span>อัปเดตอัตโนมัติ</span></h2>
-<div class="toolbar"><span class="live">รอการตัดสินใจ {{ rows|length }} รายการ</span></div>
+<div class="toolbar"><span class="live">รอการตัดสินใจ {{len .Rows}} รายการ</span></div>
 <table>
   <thead>
     <tr><th>#</th><th>เวลา</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th><th>ตัดสินใจ</th></tr>
   </thead>
   <tbody id="approval-rows">
-    {% for r in rows %}
-    <tr id="appr-{{ r.id }}">
-      <td>{{ r.id }}</td>
-      <td class="mono time" data-ts="{{ r.ts }}">{{ r.ts[11:19] }}</td>
-      <td>{{ r.playbook }}</td>
-      <td>{{ r.action }}</td>
-      <td>{{ r.summary or r.params }}</td>
+    {{range .Rows}}
+    <tr id="appr-{{.ID}}">
+      <td>{{.ID}}</td>
+      <td class="mono time" data-ts="{{.Ts}}">{{.Ts}}</td>
+      <td>{{.Playbook}}</td>
+      <td>{{.Action}}</td>
+      <td>{{if .Summary}}{{.Summary}}{{else}}{{.Params}}{{end}}</td>
       <td>
-        <button class="btn btn-approve" onclick="decide({{ r.id }}, true)">✅ อนุมัติ</button>
-        <button class="btn btn-deny" onclick="decide({{ r.id }}, false)">❌ ปฏิเสธ</button>
+        <button class="btn btn-approve" onclick="decide({{.ID}}, true)">✅ อนุมัติ</button>
+        <button class="btn btn-deny" onclick="decide({{.ID}}, false)">❌ ปฏิเสธ</button>
       </td>
     </tr>
-    {% else %}
+    {{else}}
     <tr id="empty-row"><td colspan="6" class="empty">ไม่มีรายการรออนุมัติ</td></tr>
-    {% endfor %}
+    {{end}}
   </tbody>
 </table>
 
@@ -68,4 +67,4 @@
   }
   setInterval(refreshApprovals, 3000);
 </script>
-{% endblock %}
+{{end}}

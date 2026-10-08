@@ -1,28 +1,27 @@
-{% extends "base.html" %}
-{% block title %}ประวัติการทำงาน{% endblock %}
-{% block content %}
+{{define "title"}}ประวัติการทำงาน{{end}}
+{{define "content"}}
 <h2 style="margin-bottom:16px">ประวัติการทำงาน (Audit Log — รองรับ PDPA)</h2>
 <div class="toolbar">
   <input class="filter" id="audit-filter" type="search" placeholder="🔍 ค้นหา: เพลย์บุ๊ก, การกระทำ, IP, alert…">
-  <span class="live">ทั้งหมด {{ rows|length }} รายการ (แสดงล่าสุด 100)</span>
+  <span class="live">ทั้งหมด {{len .Rows}} รายการ (แสดงล่าสุด 100)</span>
 </div>
 <table>
   <thead>
     <tr><th>#</th><th>เวลา</th><th>Alert</th><th>เพลย์บุ๊ก</th><th>การกระทำ</th><th>รายละเอียด</th></tr>
   </thead>
   <tbody id="audit-rows">
-    {% for r in rows %}
+    {{range .Rows}}
     <tr>
-      <td>{{ r.id }}</td>
-      <td class="mono time nowrap" data-ts="{{ r.ts }}">{{ r.ts }}</td>
-      <td class="nowrap">{{ r.alert_id }}</td>
-      <td class="nowrap">{{ r.playbook }}</td>
-      <td class="nowrap">{{ r.action }}</td>
-      <td class="mono" title="{{ r.detail }}">{{ r.human_detail }}</td>
+      <td>{{.ID}}</td>
+      <td class="mono time nowrap" data-ts="{{.Ts}}">{{.Ts}}</td>
+      <td class="nowrap">{{.AlertID}}</td>
+      <td class="nowrap">{{.Playbook}}</td>
+      <td class="nowrap">{{.Action}}</td>
+      <td class="mono" title="{{.Detail}}">{{.HumanDetail}}</td>
     </tr>
-    {% else %}
+    {{else}}
     <tr><td colspan="6" class="empty">ยังไม่มีประวัติ</td></tr>
-    {% endfor %}
+    {{end}}
   </tbody>
 </table>
 
@@ -36,4 +35,4 @@
     });
   });
 </script>
-{% endblock %}
+{{end}}

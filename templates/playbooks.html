@@ -1,10 +1,9 @@
-{% extends "base.html" %}
-{% block title %}เพลย์บุ๊ก{% endblock %}
-{% block content %}
+{{define "title"}}เพลย์บุ๊ก{{end}}
+{{define "content"}}
 <h2 style="margin-bottom:16px">เพลย์บุ๊ก</h2>
 <p style="color:#5a6b82; margin-bottom:16px">เปิด/ปิดหรือแก้ไขเพลย์บุ๊กได้จากฟอร์มภาษาไทย</p>
 <div class="toolbar">
-  <span class="live">ทั้งหมด {{ books|length }} เพลย์บุ๊ก</span>
+  <span class="live">ทั้งหมด {{len .Books}} เพลย์บุ๊ก</span>
   <button class="btn btn-primary" onclick="openModal('')">➕ สร้างเพลย์บุ๊กใหม่</button>
 </div>
 <table>
@@ -12,33 +11,33 @@
     <tr><th>ชื่อ</th><th>รายละเอียด</th><th>โหมด</th><th>สถานะ</th><th>เปิด/ปิด</th><th></th></tr>
   </thead>
   <tbody>
-  {% for b in books %}
+  {{range .Books}}
   <tr>
     <td>
-      <strong>{{ b.name }}</strong>
-      {% if b.custom %}<span class="tag on" style="margin-left:4px">สร้างเอง</span>{% endif %}
-      {% if b.edited %}<span class="tag auto" style="margin-left:4px">แก้ไขแล้ว</span>{% endif %}
+      <strong>{{.Name}}</strong>
+      {{if .IsCustom}}<span class="tag on" style="margin-left:4px">สร้างเอง</span>{{end}}
+      {{if .Edited}}<span class="tag auto" style="margin-left:4px">แก้ไขแล้ว</span>{{end}}
     </td>
-    <td>{{ b.description }}</td>
-    <td><span class="tag {{ b.gate }}">{{ 'อัตโนมัติ' if b.gate=='auto' else 'ต้องอนุมัติ' }}</span></td>
-    <td><span class="tag {{ 'on' if b.enabled else 'off' }}">{{ 'เปิด' if b.enabled else 'ปิด' }}</span></td>
+    <td>{{.Description}}</td>
+    <td><span class="tag {{.GateClass}}">{{.GateLabel}}</span></td>
+    <td><span class="tag {{.StatusClass}}">{{.StatusLabel}}</span></td>
     <td>
       <label class="switch">
-        <input type="checkbox" data-playbook="{{ b.name }}" {{ 'checked' if b.enabled else '' }} onchange="toggle(this)">
+        <input type="checkbox" data-playbook="{{.Name}}" {{if .Enabled}}checked{{end}} onchange="toggle(this)">
         <span class="slider"></span>
       </label>
     </td>
-    <td><button class="btn btn-ghost" onclick="openModal('{{ b.name }}')">✏️ แก้ไข</button></td>
+    <td><button class="btn btn-ghost" onclick="openModal('{{.Name}}')">✏️ แก้ไข</button></td>
   </tr>
-  {% endfor %}
+  {{end}}
   </tbody>
 </table>
 
 <!-- ===================== Edit / Create modal ===================== -->
-<div class="modal-overlay{% if initial_playbook %} open{% endif %}" id="pb-modal">
+<div class="modal-overlay{{if .HasInitial}} open{{end}}" id="pb-modal">
   <div class="modal">
     <div class="modal-head">
-      <h3 id="pb-title">{% if initial_playbook %}✏️ แก้ไข: {{ initial_playbook.name }}{% else %}แก้ไขเพลย์บุ๊ก{% endif %}</h3>
+      <h3 id="pb-title">{{if .HasInitial}}✏️ แก้ไข: {{.InitName}}{{else}}แก้ไขเพลย์บุ๊ก{{end}}</h3>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
@@ -47,12 +46,12 @@
       <div class="form-row">
         <label>ชื่อเพลย์บุ๊ก <span class="hint">ภาษาอังกฤษตัวพิมพ์เล็ก (a-z, 0-9, -, _)</span></label>
         <input type="text" id="f-name" placeholder="เช่น custom-block-ransom"
-               {% if initial_playbook %}value="{{ initial_playbook.name }}" disabled{% endif %}>
+               {{if .HasInitial}}value="{{.InitName}}" disabled{{end}}>
       </div>
 
       <div class="form-row">
         <label>คำอธิบาย <span class="hint">ภาษาไทยก็ได้</span></label>
-        <textarea id="f-desc" placeholder="อธิบายว่าเพลย์บุ๊กนี้ใช้ตรวจจับอะไร">{% if initial_playbook %}{{ initial_playbook.description }}{% endif %}</textarea>
+        <textarea id="f-desc" placeholder="อธิบายว่าเพลย์บุ๊กนี้ใช้ตรวจจับอะไร">{{if .HasInitial}}{{.InitDesc}}{{end}}</textarea>
       </div>
 
       <div class="form-grid">
@@ -60,7 +59,7 @@
           <label>เปิดใช้งาน</label>
           <div class="radio-group">
             <label class="switch" style="margin-left:4px">
-              <input type="checkbox" id="f-enabled" {% if not initial_playbook or initial_playbook.enabled %}checked{% endif %}>
+              <input type="checkbox" id="f-enabled" {{if or (not .HasInitial) .InitEnabled}}checked{{end}}>
               <span class="slider"></span>
             </label>
             <span id="f-enabled-lbl" style="font-size:13px;color:#5a6b82">เปิด</span>
@@ -69,8 +68,8 @@
         <div class="form-row">
           <label>โหมดการทำงาน</label>
           <div class="radio-group">
-            <label><input type="radio" name="gate" value="auto" {% if not initial_playbook or initial_playbook.gate == 'auto' %}checked{% endif %}> อัตโนมัติ</label>
-            <label><input type="radio" name="gate" value="human" {% if initial_playbook and initial_playbook.gate == 'human' %}checked{% endif %}> ต้องอนุมัติ</label>
+            <label><input type="radio" name="gate" value="auto" {{if or (not .HasInitial) (eq .InitGate "auto")}}checked{{end}}> อัตโนมัติ</label>
+            <label><input type="radio" name="gate" value="human" {{if and .HasInitial (eq .InitGate "human")}}checked{{end}}> ต้องอนุมัติ</label>
           </div>
         </div>
       </div>
@@ -96,18 +95,18 @@
         <textarea id="sample-alert" rows="4" class="mono" spellcheck="false"></textarea>
       </div>
 
-      <div class="preview" id="pv-box" {% if initial_preview %}style="display:block"{% endif %}>
+      <div class="preview" id="pv-box" {{if .InitialPreview}}style="display:block"{{end}}>
         <div class="pv-title">ผลการทดสอบ (dry-run — ยังไม่มีการทำงานจริง)</div>
-        <div class="pv-step" id="pv-alert">{% if initial_preview %}<b>ทดสอบกับ:</b> {{ initial_preview.fields.title }} (severity {{ initial_preview.fields.severity }}){% endif %}</div>
+        <div class="pv-step" id="pv-alert">{{if .InitialPreview}}<b>ทดสอบกับ:</b> {{.InitialPreview.fields.title}} (severity {{.InitialPreview.fields.severity}}){{end}}</div>
         <div id="pv-body">
-          {% if initial_preview %}
-          <div class="pv-step"><b>ผลการจับคู่:</b> {{ '✅ ตรงกับเงื่อนไข' if initial_preview.matched else '❌ ไม่ตรง — เพลย์บุ๊กนี้จะไม่ทำงานกับ alert นี้' }}</div>
-          {% if initial_preview.matched %}
-            {% for s in initial_preview.steps %}
-            <div class="pv-step">{{ '🔔' if s.action=='notify' else '🚫' if s.action=='block_ip' else '🛑' if s.action=='isolate_host' else '📁' if s.action=='preserve_evidence' else '📝' }} <b>{{ s.action }}</b> <span class="tag {{ s.gate }}">{{ 'ต้องอนุมัติ' if s.gate=='human' else 'อัตโนมัติ' }}</span><br><span style="color:#5a6b82">{{ s.detail }}</span></div>
-            {% endfor %}
-          {% endif %}
-          {% endif %}
+          {{if .InitialPreview}}
+          <div class="pv-step"><b>ผลการจับคู่:</b> {{if .InitialPreview.matched}}✅ ตรงกับเงื่อนไข{{else}}❌ ไม่ตรง — เพลย์บุ๊กนี้จะไม่ทำงานกับ alert นี้{{end}}</div>
+          {{if .InitialPreview.matched}}
+            {{range .InitialPreview.steps}}
+            <div class="pv-step">{{.icon}} <b>{{.action}}</b> <span class="tag {{.gate}}">{{if eq .gate "human"}}ต้องอนุมัติ{{else}}อัตโนมัติ{{end}}</span><br><span style="color:#5a6b82">{{.detail}}</span></div>
+            {{end}}
+          {{end}}
+          {{end}}
         </div>
       </div>
 
@@ -115,7 +114,7 @@
         <div class="form-row">
           <label>คำค้นหาที่ใช้ตรวจจับ <span class="hint">พิมพ์แล้วกด Enter</span></label>
           <div class="chips" id="kw-chips">
-            {% for k in initial_playbook.keywords if initial_playbook %}<span class="chip" data-kw="{{ k }}">{{ k }} <button onclick="this.parentElement.remove()">×</button></span>{% endfor %}
+            {{range .InitKeywords}}<span class="chip" data-kw="{{.}}">{{.}} <button onclick="this.parentElement.remove()">×</button></span>{{end}}
             <input type="text" id="kw-input" placeholder="เช่น ransomware, encrypt, wannacry">
           </div>
         </div>
@@ -123,37 +122,32 @@
         <div class="form-row">
           <label>ความรุนแรงขั้นต่ำ</label>
           <select id="f-minsev">
-            {% for s in range(16) %}
-            <option value="{{ s }}" {% if initial_playbook and initial_playbook.min_severity == s %}selected{% endif %}>{{ 'ไม่จำกัด (0)' if s == 0 else s }}</option>
-            {% endfor %}
+            {{range .MinSevOptions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
           </select>
         </div>
 
         <div class="form-row full">
           <label>IP ข้อยกเว้น (ไวท์ลิสต์ — จะไม่บล็อก) <span class="hint">หนึ่ง IP ต่อบรรทัด</span></label>
-          <textarea id="f-notip" placeholder="เช่น 203.0.113.99&#10;10.0.0.10">{% if initial_playbook %}{{ initial_playbook.not_ip | join('\n') }}{% endif %}</textarea>
+          <textarea id="f-notip" placeholder="เช่น 203.0.113.99&#10;10.0.0.10">{{if .HasInitial}}{{.InitNotIPText}}{{end}}</textarea>
         </div>
 
-        <div class="form-row" id="row-duration" {% if not initial_playbook or 'block_ip' in initial_playbook.actions %}style="display:block"{% else %}style="display:none"{% endif %}>
+        <div class="form-row" id="row-duration" style="display:none">
           <label>ระยะเวลาบล็อก IP</label>
           <select id="f-duration">
-            <option value="600" {% if not initial_playbook or initial_playbook.block_duration == 600 %}selected{% endif %}>10 นาที</option>
-            <option value="1800" {% if initial_playbook and initial_playbook.block_duration == 1800 %}selected{% endif %}>30 นาที</option>
-            <option value="3600" {% if initial_playbook and initial_playbook.block_duration == 3600 %}selected{% endif %}>60 นาที</option>
-            <option value="86400" {% if initial_playbook and initial_playbook.block_duration == 86400 %}selected{% endif %}>24 ชั่วโมง</option>
+            {{range .DurOptions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
           </select>
         </div>
 
-        <div class="form-row" id="row-template" {% if not initial_playbook or 'notify' in initial_playbook.actions %}style="display:block"{% else %}style="display:none"{% endif %}>
+        <div class="form-row" id="row-template" style="display:none">
           <label>ข้อความแจ้งเตือน (LINE) <span class="hint">ใช้ตัวแปรได้: {title} {src_ip} {host} {user} {url} {hash} {severity} {source}</span></label>
-          <input type="text" id="f-template" placeholder="⚠️ {title} จาก IP {src_ip}" {% if initial_playbook %}value="{{ initial_playbook.notify_template }}"{% endif %}>
+          <input type="text" id="f-template" placeholder="⚠️ {title} จาก IP {src_ip}" {{if .HasInitial}}value="{{.InitTemplate}}"{{end}}>
         </div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-test" id="btn-test" onclick="testDraft()">▶️ ทดสอบกับ alert ตัวอย่าง</button>
-      <button class="btn btn-danger" id="btn-delete" {% if not initial_playbook or not initial_playbook.custom %}style="display:none"{% endif %} onclick="delPlaybook()">🗑️ ลบเพลย์บุ๊ก</button>
-      <button class="btn btn-ghost" id="btn-revert" {% if not initial_playbook %}style="display:none"{% endif %} onclick="revertPlaybook()">↩️ ย้อนกลับ (เวอร์ชันก่อนหน้า)</button>
+      <button class="btn btn-danger" id="btn-delete" {{if or (not .HasInitial) (not .InitCustom)}}style="display:none"{{end}} onclick="delPlaybook()">🗑️ ลบเพลย์บุ๊ก</button>
+      <button class="btn btn-ghost" id="btn-revert" {{if not .HasInitial}}style="display:none"{{end}} onclick="revertPlaybook()">↩️ ย้อนกลับ (เวอร์ชันก่อนหน้า)</button>
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
       <button class="btn btn-primary" onclick="savePlaybook()">💾 บันทึก</button>
@@ -270,7 +264,6 @@ function renumber() {
   rows.forEach((row, i) => {
     row.querySelector('.step-num').textContent = i + 1;
   });
-  // step counter + overflow hint (list stays compact however many steps)
   const list = document.getElementById('action-group');
   document.getElementById('step-count').textContent =
     rows.length ? `— ${rows.length} ขั้นตอน` : '— ยังไม่มีขั้นตอน — กด ➕ เพื่อเพิ่ม';
@@ -364,7 +357,6 @@ function closeModal() { document.getElementById('pb-modal').classList.remove('op
 
 function collectForm() {
   const gate = document.querySelector('input[name=gate]:checked').value;
-  // The numbered list order = the customer's step order (1-2-3)
   const actions = currentActions();
   const data = {
     name: document.getElementById('f-name').value.trim(),
@@ -462,14 +454,14 @@ async function delPlaybook() {
 
 // ?test=<name> = server-rendered demo state (form filled + preview visible);
 // the step list is built synchronously here — no fetch, screenshot-safe.
-{% if initial_playbook %}
-pbName = {{ initial_playbook.name | tojson }};
-pbLocks = {{ initial_playbook.locks | tojson }};
-pbCustom = {{ initial_playbook.custom | tojson }};
-renderStepList({{ initial_playbook.actions | tojson }});
+{{if .HasInitial}}
+pbName = {{.InitName | json}};
+pbLocks = {{.InitLocksJS}};
+pbCustom = {{.InitCustom}};
+renderStepList({{.InitActionsJS}});
 fillSample('brute');
 syncExtras();
-{% else %}
+{{else}}
 renderStepList(DEFAULT_ACTION_ORDER);
 fillSample('brute');
 // #edit-<name> auto-opens the modal and fills it from the API
@@ -478,6 +470,6 @@ if (location.hash.startsWith('#edit-')) {
   const name = decodeURIComponent(parts[0]);
   openModal(name);
 }
-{% endif %}
+{{end}}
 </script>
-{% endblock %}
+{{end}}
