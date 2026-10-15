@@ -203,12 +203,14 @@ func deliverAggregate(it *aggItem) LineResult {
 				Detail: fmt.Sprintf("quiet hours (severity %d < %d)", sev, floor)}
 		}
 	}
-	// Daily cap is in MESSAGES, not incidents (design §6).
-	if cap := CONFIG.Line.DailyCap; cap > 0 {
-		if sent := lineMessagesSentToday(); sent >= cap {
-			return LineResult{Status: stCapped,
-				Detail: fmt.Sprintf("daily cap reached (%d/%d messages today)", sent, cap)}
-		}
+	// Daily cap, in MESSAGES not incidents (design §6). It protects the 300/month budget,
+	// but it must NEVER silence a severe alert: measured on the lab, a ransomware
+	// notification was recorded as `capped` because an earlier burst had already spent the
+	// day's budget, so the operator was never told. The cap now applies only below
+	// capExemptSeverity, and a suppressed send is still recorded as `capped` so the
+	// omission stays visible rather than silent.
+	if ok, why := capAllows(sev, CONFIG.Line.DailyCap, lineMessagesSentToday()); !ok {
+		return LineResult{Status: stCapped, Detail: why}
 	}
 	msg := renderLineMessage(it.fields, it.actions, it.pending, it.count, it.incident, disclosureLevel())
 	return linePushText(msg)
@@ -243,6 +245,28 @@ func auditNotify(it *aggItem, res LineResult, status string) {
 		"ts": nowISO(), "alert_id": it.alertID, "playbook": it.playbook,
 		"action": "notify", "detail": string(dj),
 	})
+}
+
+// capExemptSeverity: at or above this severity the daily message cap does not apply.
+// 12 is the UI's "สูง" (high) threshold and the level a ransomware verdict carries, so a
+// burst of noise can never spend the budget that a real incident needs.
+const capExemptSeverity = 12
+
+// capAllows decides whether the daily cap permits a send. Extracted from deliverAggregate
+// so the rule is unit-testable without a clock, a network call or a database.
+func capAllows(sev int64, cap, sentToday int) (bool, string) {
+	if cap <= 0 {
+		return true, "" // cap disabled
+	}
+	if sev >= capExemptSeverity {
+		return true, ""
+	}
+	if sentToday >= cap {
+		return false, fmt.Sprintf(
+			"daily cap reached (%d/%d messages today) and severity %d is below the cap-exempt floor %d",
+			sentToday, cap, sev, capExemptSeverity)
+	}
+	return true, ""
 }
 
 func severityOf(fields map[string]interface{}) int64 {
