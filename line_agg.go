@@ -34,6 +34,12 @@ type aggItem struct {
 	// approval request was its own message. Folding it in halves the cost and
 	// loses nothing — the incident is still announced exactly once.
 	pending []string
+
+	// timer arms the flush. It is RE-ARMED on every fold so the window measures
+	// QUIET time rather than age. Measured on the lab: a ransomware burst made the
+	// correlation rule re-fire every 30-60s against a fixed 30s window, so one
+	// incident fragmented into four separate messages on the operator's phone.
+	timer *time.Timer
 }
 
 type lineAggregator struct {
@@ -57,6 +63,27 @@ func (a *lineAggregator) windowOrDefault() time.Duration {
 		return a.window
 	}
 	return 30 * time.Second
+}
+
+// maxHoldMult caps how long a sliding window may stay open. Without it a sustained
+// attack that never pauses would never notify at all.
+const maxHoldMult = 5
+
+// armLocked (re)schedules the flush for `window` after the most recent fold, but never
+// later than maxHoldMult x window after the group opened. Called with a.mu held.
+func (a *lineAggregator) armLocked(it *aggItem) {
+	if it.timer != nil {
+		it.timer.Stop()
+	}
+	d := a.windowOrDefault()
+	if left := maxHoldMult*d - time.Since(it.first); left < d {
+		d = left
+	}
+	if d < time.Second {
+		d = time.Second
+	}
+	key := it.key
+	it.timer = time.AfterFunc(d, func() { a.release(key) })
 }
 
 // aggKeyFor groups everything belonging to one incident. A notification and its
@@ -91,13 +118,14 @@ func (a *lineAggregator) add(it *aggItem) (int, bool) {
 			existing.fields = it.fields
 			existing.actions = it.actions
 		}
+		a.armLocked(existing)
 		return existing.count, false
 	}
 	it.count = 1
 	it.notified = true
 	it.first = time.Now()
 	a.items[it.key] = it
-	time.AfterFunc(a.windowOrDefault(), func() { a.release(it.key) })
+	a.armLocked(it)
 	return 1, true
 }
 
@@ -107,14 +135,23 @@ func (a *lineAggregator) addPending(it *aggItem, note string) (int, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if existing, ok := a.items[it.key]; ok {
+		// Dedupe. N alerts folding into one message produced the same approval
+		// request N times — the operator saw each "⏳ ขออนุมัติ:" line twice.
+		for _, p := range existing.pending {
+			if p == note {
+				a.armLocked(existing)
+				return existing.count, false
+			}
+		}
 		existing.pending = append(existing.pending, note)
+		a.armLocked(existing)
 		return existing.count, false
 	}
 	it.count = 1
 	it.first = time.Now()
 	it.pending = []string{note}
 	a.items[it.key] = it
-	time.AfterFunc(a.windowOrDefault(), func() { a.release(it.key) })
+	a.armLocked(it)
 	return 1, true
 }
 

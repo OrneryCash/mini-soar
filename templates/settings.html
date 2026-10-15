@@ -1,0 +1,87 @@
+{{define "title"}}ตั้งค่าและโหมดการทำงาน{{end}}
+{{define "content"}}
+<div class="toolbar">
+  <h2 style="font-size:20px;color:#0d2b4e">ตั้งค่าและโหมดการทำงาน</h2>
+</div>
+
+{{if gt .RealCount 0}}
+<div class="errors" style="background:#fdeeda;border-color:#f0d9a8;color:#a05a00">
+  <strong>⚠️ เปิดใช้โหมดของจริง {{.RealCount}} รายการ:</strong> {{.RealList}}<br>
+  รายการเหล่านี้จะถูกสั่งไปที่ endpoint จริงทันทีเมื่อมีการอนุมัติ — ไม่ใช่การจำลองอีกต่อไป
+</div>
+{{else}}
+<div class="card" style="margin-bottom:16px;border-left:4px solid #1e7a3c">
+  <strong>✅ โหมดจำลองทั้งหมด</strong>
+  <div style="font-size:13px;color:#5a6b82;margin-top:4px">
+    ระบบบันทึกว่า “จะทำอะไร” แต่ไม่แตะระบบจริง — เหมาะกับการสาธิตและการทดสอบเพลย์บุ๊ก
+  </div>
+</div>
+{{end}}
+
+<div class="card" style="margin-bottom:16px">
+  <strong>สถานะ Wazuh API (ใช้เฉพาะโหมดของจริง)</strong>
+  <div style="font-size:13px;margin-top:6px">
+    {{if .WazuhOK}}<span class="tag on">เชื่อมต่อได้</span>{{else}}<span class="tag off">เชื่อมต่อไม่ได้</span>{{end}}
+    <span style="color:#5a6b82;margin-left:8px">{{.WazuhMsg}}</span>
+  </div>
+  <div style="font-size:12px;color:#8a97ab;margin-top:8px">
+    โหมดของจริงใช้ Wazuh Active Response: SOAR สั่งผ่าน API ของ manager แล้วให้ <b>agent</b> ทำงานที่ปลายทางเอง
+    — SOAR ไม่มีรหัสของโฮสต์ และแก้ allowlist/TTL ในสคริปต์ที่ endpoint ไม่ได้
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr><th style="width:26%">การกระทำ</th><th>กลไกเมื่อเป็นของจริง</th><th style="width:22%">โหมด</th></tr>
+  </thead>
+  <tbody>
+  {{range .Actions}}
+    <tr>
+      <td>
+        <strong>{{.Label}}</strong><br>
+        <span class="mono">{{.Name}}</span>
+        {{if .High}}<span class="tag human">กระทบระบบ</span>{{end}}
+      </td>
+      <td>
+        <span class="mono">{{.Backend}}</span>
+        <div style="font-size:12px;color:#5a6b82;margin-top:5px">{{.Detail}}</div>
+      </td>
+      <td class="nowrap">
+        {{if .Real}}
+          <span class="tag off">ของจริง</span>
+          <button class="btn btn-ghost" data-action="{{.Name}}" data-mode="{{$.ModeSim}}" style="margin-top:6px">กลับเป็นจำลอง</button>
+        {{else}}
+          <span class="tag auto">จำลอง</span>
+          <button class="btn btn-primary" data-action="{{.Name}}" data-mode="{{$.ModeReal}}" style="margin-top:6px">ใช้ของจริง</button>
+        {{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+
+<div style="font-size:12px;color:#8a97ab;margin-top:14px">
+  การเปลี่ยนโหมดถูกบันทึกใน “ประวัติการทำงาน” เสมอ (action = <span class="mono">set_mode</span>)
+  เพื่อให้ตรวจสอบย้อนหลังได้ว่าช่วงใดระบบถูกตั้งเป็นโหมดของจริง
+</div>
+
+<script>
+document.querySelectorAll('button[data-action]').forEach(b => {
+  b.addEventListener('click', async () => {
+    const toReal = b.dataset.mode === '{{.ModeReal}}';
+    if (toReal && !confirm('เปิดใช้โหมด "ของจริง" สำหรับ ' + b.dataset.action + ' ?\n\nการกระทำนี้จะส่งคำสั่งจริงไปที่ endpoint เมื่อได้รับการอนุมัติ')) return;
+    b.disabled = true;
+    try {
+      const r = await fetch('/api/settings/' + b.dataset.action, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'mode=' + encodeURIComponent(b.dataset.mode)
+      });
+      const j = await r.json();
+      if (!j.ok) { alert(j.error || 'เปลี่ยนโหมดไม่สำเร็จ'); b.disabled = false; return; }
+      location.reload();
+    } catch (e) { alert('ผิดพลาด: ' + e); b.disabled = false; }
+  });
+});
+</script>
+{{end}}

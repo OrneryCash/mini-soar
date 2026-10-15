@@ -35,10 +35,11 @@ func humanActionDetail(r Action) string {
 			res = str(d["detail"])
 		}
 		suffix := res
-		if strings.Contains(res, "SIMULATED") {
+		switch {
+		case strings.Contains(res, "SIMULATED"):
 			suffix = "จำลอง"
-		} else if strings.Contains(res, "iptables") {
-			suffix = "บล็อกจริง (iptables)"
+		case strings.Contains(res, "QUEUED"):
+			suffix = "สั่งจริง (queued)"
 		}
 		return fmt.Sprintf("บล็อก IP %s (%ss) [%s]", ip, dur, suffix)
 	case "preserve_evidence":
@@ -116,13 +117,31 @@ func actionBlockIP(fields map[string]interface{}, ipField string, duration int, 
 	expiresISO := time.Now().UTC().Add(time.Duration(dur) * time.Second).Format("2006-01-02T15:04:05+00:00")
 
 	status, detail := "", ""
-	if backend == "iptables" {
-		// Real block is Linux-only; kept as best-effort and logged like Python.
-		status = "error"
-		detail = "iptables backend not executed by the Go port"
-	} else {
+	switch {
+	case !actionIsReal("block_ip"):
+		// Simulated (the default): record exactly what would have run, change nothing.
 		status = "simulated"
-		detail = fmt.Sprintf("SIMULATED block of %s for %ds (backend: %s)", ip, dur, backend)
+		detail = fmt.Sprintf("SIMULATED block of %s for %ds — set block_ip to real in Settings to enforce it", ip, dur)
+	case !wazuh.configured():
+		status = "error"
+		detail = "block_ip is set to real but the Wazuh API is not configured"
+	default:
+		agentID, err := wazuh.agentIDFor(str(fields["host"]))
+		if err != nil {
+			status, detail = "error", err.Error()
+			break
+		}
+		// firewall-drop reads -srcip, and the standard script also reads
+		// alert.data.srcip — send both, per the Wazuh API contract.
+		if err := wazuh.runActiveResponse(agentID, "!firewall-drop",
+			[]string{"-srcip", ip}, map[string]interface{}{"srcip": ip}); err != nil {
+			status, detail = "error", err.Error()
+			break
+		}
+		// 200 means QUEUED on the manager, not executed on the agent. Never "done".
+		status = "queued"
+		detail = fmt.Sprintf("QUEUED firewall-drop %s for %ds on agent %s — verify with iptables on the endpoint",
+			ip, dur, agentID)
 	}
 	_, _ = auditInsert("blocks", map[string]interface{}{
 		"ts": nowISO(), "ip": ip, "duration": dur, "expires_at": expiresISO,
@@ -140,14 +159,39 @@ func actionIsolateHost(fields map[string]interface{}, hostField string, alertID 
 		hostField = "host"
 	}
 	host := str(fields[hostField])
-	detail := "no host in alert"
-	if host != "" {
-		detail = "HOST ISOLATED (simulated): " + host
+	status, detail := "", ""
+
+	switch {
+	case host == "":
+		status, detail = "skipped", "no host in the alert to isolate"
+	case !actionIsReal("isolate_host"):
+		status = "isolated_simulated"
+		detail = "SIMULATED isolation of " + host + " — set isolate_host to real in Settings to enforce it"
+	case !wazuh.configured():
+		status, detail = "error", "isolate_host is set to real but the Wazuh API is not configured"
+	default:
+		agentID, err := wazuh.agentIDFor(host)
+		if err != nil {
+			status, detail = "error", err.Error()
+			break
+		}
+		if err := wazuh.runActiveResponse(agentID, "!isolate-host", nil,
+			map[string]interface{}{"host": host}); err != nil {
+			status, detail = "error", err.Error()
+			break
+		}
+		// Queued, not done. The allowlist and the TTL live in isolate-host.sh on the
+		// endpoint, so the SOAR cannot narrow or widen them.
+		status = "queued"
+		detail = fmt.Sprintf("QUEUED isolate-host on %s (agent %s) — allowlist and TTL are enforced on the endpoint",
+			host, agentID)
 	}
+
 	_, _ = auditInsert("actions", map[string]interface{}{
-		"ts": nowISO(), "alert_id": alertID, "playbook": playbook, "action": "isolate_host", "detail": detail,
+		"ts": nowISO(), "alert_id": alertID, "playbook": playbook, "action": "isolate_host",
+		"detail": detail + "  [mode: " + actionMode("isolate_host") + "]",
 	})
-	return map[string]interface{}{"status": "isolated_simulated", "detail": detail, "host": host}
+	return map[string]interface{}{"status": status, "detail": detail, "host": host}
 }
 
 func actionEvidence(fields map[string]interface{}, alert map[string]interface{}, alertID int64, playbook string) map[string]interface{} {

@@ -17,15 +17,14 @@ when:
 steps:
   - action: notify
     params:
-      template: "🚨 แจ้งเตือนแรนซัมแวร์: {title} จากโฮสต์ {host} → กำลังบล็อก IP {src_ip}"
+      template: "🚨 แจ้งเตือนแรนซัมแวร์: {title} ที่โฮสต์ {host} — เก็บหลักฐานแล้ว รออนุมัติแยกโฮสต์"
   - action: preserve_evidence
     params: {}
-  - action: block_ip
-    params:
-      ip_field: src_ip
-      duration: 3600
-    gate: human           # containment → human approval (design review)
-  - action: isolate_host   # disruptive → human decides (example of the boundary)
+  # Containment for ransomware is the HOST, not an IP. A FIM-based ransomware alert
+  # carries no source address, so a block_ip step here can only ever queue a
+  # meaningless approval ("บล็อกไอพี  " with an empty address) and mislead the operator
+  # about what is about to happen. Removed after the end-to-end test showed it.
+  - action: isolate_host
     params:
       host_field: host
     gate: human

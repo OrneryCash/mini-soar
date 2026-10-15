@@ -29,21 +29,35 @@ type LineConfig struct {
 	APIBase       string      `yaml:"api_base"` // test hook; empty = real LINE
 }
 
+// WazuhConfig is the manager's REST API, used to run REAL Active Response.
+//
+// The SOAR never touches an endpoint directly: it asks the manager's API to queue an
+// Active Response command and the AGENT runs it locally. That is why no host
+// credentials live in mini-SOAR, why the manager's own logs record every real
+// action, and why the endpoint's guardrails (allowlist, TTL) cannot be overridden
+// from the SOAR. Credentials belong in config.local.yaml (gitignored) or the env.
+type WazuhConfig struct {
+	APIURL  string `yaml:"api_url"` // e.g. https://10.10.221.18:55000
+	APIUser string `yaml:"api_user"`
+	APIPass string `yaml:"api_password"`
+}
+
 type Config struct {
 	Server struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`
 	} `yaml:"server"`
-	PlaybooksDir  string     `yaml:"playbooks_dir"`
-	DataDir       string     `yaml:"data_dir"`
-	EvidenceDir   string     `yaml:"evidence_dir"`
-	Line          LineConfig `yaml:"line"`
-	Firewall      string     `yaml:"firewall_backend"`
-	BlockDefault  int        `yaml:"block_default_duration"`
-	ApprovalTO    int        `yaml:"approval_timeout_seconds"`
-	ApprovalMode  string     `yaml:"approval_timeout_action"`
-	WebhookSecret string     `yaml:"webhook_secret"`
-	DBPath        string     `yaml:"db_path"`
+	PlaybooksDir  string      `yaml:"playbooks_dir"`
+	DataDir       string      `yaml:"data_dir"`
+	EvidenceDir   string      `yaml:"evidence_dir"`
+	Line          LineConfig  `yaml:"line"`
+	Wazuh         WazuhConfig `yaml:"wazuh"`
+	Firewall      string      `yaml:"firewall_backend"`
+	BlockDefault  int         `yaml:"block_default_duration"`
+	ApprovalTO    int         `yaml:"approval_timeout_seconds"`
+	ApprovalMode  string      `yaml:"approval_timeout_action"`
+	WebhookSecret string      `yaml:"webhook_secret"`
+	DBPath        string      `yaml:"db_path"`
 
 	// Legacy flat keys (pre-`line:` schema). Still honoured so an existing
 	// deployment does not lose its target on upgrade.
@@ -90,6 +104,15 @@ func mergeLineOverlay(dst, o *Config) {
 	if o.Firewall != "" {
 		dst.Firewall = o.Firewall
 	}
+	if o.Wazuh.APIURL != "" {
+		dst.Wazuh.APIURL = o.Wazuh.APIURL
+	}
+	if o.Wazuh.APIUser != "" {
+		dst.Wazuh.APIUser = o.Wazuh.APIUser
+	}
+	if o.Wazuh.APIPass != "" {
+		dst.Wazuh.APIPass = o.Wazuh.APIPass
+	}
 }
 
 func loadConfig() Config {
@@ -113,6 +136,15 @@ func loadConfig() Config {
 	}
 	if v := os.Getenv("LINE_API_BASE"); v != "" {
 		c.Line.APIBase = v
+	}
+	if v := os.Getenv("WAZUH_API_URL"); v != "" {
+		c.Wazuh.APIURL = v
+	}
+	if v := os.Getenv("WAZUH_API_USER"); v != "" {
+		c.Wazuh.APIUser = v
+	}
+	if v := os.Getenv("WAZUH_API_PASSWORD"); v != "" {
+		c.Wazuh.APIPass = v
 	}
 
 	// Defaults
