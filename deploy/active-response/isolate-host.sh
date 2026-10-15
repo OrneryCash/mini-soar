@@ -16,19 +16,27 @@
 # Isolation policy: allow loopback, the management addresses, and established
 # connections; DROP everything else in both directions.
 #
-# Tunables (env, set by the AR config or systemd, not by the caller):
-#   MINISOAR_ISOLATE_ALLOW  space-separated allowlist
-#   MINISOAR_ISOLATE_TTL    seconds before the self-expiry lifts it (default 1800)
+# Tunables — read from the site file below, never from the caller:
+#   /var/ossec/etc/minisoar-isolate.conf  ->  MINISOAR_ISOLATE_ALLOW, MINISOAR_ISOLATE_TTL
 
 set -u
 
 LOG=/var/ossec/logs/active-responses.log
 CHAIN=MINISOAR_ISOLATE
 UNIT=minisoar-unisolate
+
+# Site values live OUTSIDE this script. The allowlist is site-specific and it goes STALE:
+# the first dry run of this test found the management host's DHCP address had already moved
+# (10.194.156.73 -> 10.194.157.19), so a hard-coded control IP would have cut the only way
+# back in. Keep literals out of the deployed file.
+CONF=/var/ossec/etc/minisoar-isolate.conf
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+
 TTL=${MINISOAR_ISOLATE_TTL:-1800}
-# The manager MUST be here or the host can never be un-isolated and its own telemetry
-# stops. The control host is here so an operator can still reach it deliberately.
-ALLOW_IPS=${MINISOAR_ISOLATE_ALLOW:-"10.10.221.18 10.194.156.73"}
+# The manager MUST be in the allowlist, or the host can never be un-isolated and its own
+# telemetry stops. Everything else is cut — that is the point.
+ALLOW_IPS=${MINISOAR_ISOLATE_ALLOW:-"10.10.221.18"}
 SELF=$(readlink -f "$0")
 
 log() { echo "$(date -Is) isolate-host: $*" >> "$LOG"; }

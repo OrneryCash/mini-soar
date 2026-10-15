@@ -185,6 +185,34 @@ func (w *wazuhClient) runActiveResponse(agentID, command string, args []string, 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("active-response: HTTP %d %s", resp.StatusCode, clipStr(string(body), 180))
 	}
+	// A 200 is NOT proof the command was dispatched. Wazuh answers 200 with
+	// total_affected_items = 0 and a populated failed_items when it could not reach the
+	// agent — e.g. {"failed_items":[{"error":{"code":1707,"message":"Cannot send request,
+	// agent is not active"}}]}. Reporting that as "queued" tells an operator a host is
+	// contained when nothing was sent at all: the same class of lie as a 401 recorded as
+	// "sent" and a status card reading "connected" off a token LINE had rejected. Read the
+	// body, not the status code.
+	var out struct {
+		Message string `json:"message"`
+		Data    struct {
+			Affected int `json:"total_affected_items"`
+			Failed   int `json:"total_failed_items"`
+			Items    []struct {
+				Error struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			} `json:"failed_items"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(body, &out)
+	if out.Data.Affected == 0 || out.Data.Failed > 0 {
+		why := out.Message
+		if len(out.Data.Items) > 0 {
+			why = fmt.Sprintf("%s (code %d)", out.Data.Items[0].Error.Message, out.Data.Items[0].Error.Code)
+		}
+		return fmt.Errorf("accepted but NOT delivered by the manager: %s", clipStr(why, 160))
+	}
 	return nil
 }
 
