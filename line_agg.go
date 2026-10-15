@@ -60,9 +60,19 @@ func (a *lineAggregator) windowOrDefault() time.Duration {
 }
 
 // aggKeyFor groups everything belonging to one incident. A notification and its
-// approval request must produce the SAME key, or they become two messages.
+// approval request MUST produce the same key, or they become two messages.
+//
+// The key deliberately uses the ORIGINAL alert title (_group_title), not the
+// display title: the notify path rewrites `title` with the playbook's template
+// while the approval path passes the raw fields. Keying on the display title
+// split one incident into two messages — which is exactly what happened in the
+// lab before this was fixed.
 func aggKeyFor(playbook string, fields map[string]interface{}, actions []string) string {
-	return fmt.Sprintf("%s|%s|%s|%v", playbook, str(fields["title"]), str(fields["host"]), actions)
+	title := str(fields["_group_title"])
+	if title == "" {
+		title = str(fields["title"])
+	}
+	return fmt.Sprintf("%s|%s|%s|%v", playbook, title, str(fields["host"]), actions)
 }
 
 // add queues an alert, collapsing repeats into one message with a count.
@@ -74,7 +84,12 @@ func (a *lineAggregator) add(it *aggItem) (int, bool) {
 		if existing.notified {
 			existing.count++
 		} else {
+			// A pending note opened this group before the notify step ran: the
+			// notify step's (richer) fields and actions win for display, but the
+			// count stays at 1 — one alert, not two.
 			existing.notified = true
+			existing.fields = it.fields
+			existing.actions = it.actions
 		}
 		return existing.count, false
 	}

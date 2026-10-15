@@ -532,6 +532,41 @@ func TestApprovalFoldsIntoOneMessage(t *testing.T) {
 	}
 }
 
+// Regression: the engine calls actionNotify with a playbook TEMPLATE (which
+// rewrites the display title) and notifyApproval with the RAW fields. Keying
+// the aggregation on the display title split one incident into two messages on
+// the real lab — this is that exact call pattern.
+func TestNotifyAndApprovalFoldWithTemplate(t *testing.T) {
+	ts, cap := newStub(200)
+	defer ts.Close()
+	restore := withLineConfig(ts.URL)
+	defer restore()
+
+	raw := map[string]interface{}{"title": "sshd: brute force trying to get access",
+		"host": "end-host1", "severity": int64(10), "src_ip": "10.194.218.236"}
+	acts := []string{"notify", "block_ip", "audit"}
+
+	actionNotify(raw, "⚠️ บรู๊ตฟอร์ซ: {title} จาก IP {src_ip}", acts, 742, "t3-bruteforce")
+	notifyApproval(raw, "ขออนุมัติ: บล็อกไอพี 10.194.218.236 — กรุณายืนยัน", acts, 742, "t3-bruteforce", 742)
+
+	if groups := lineAgg.FlushAll(); groups != 1 {
+		t.Fatalf("template + approval produced %d messages, want 1", groups)
+	}
+	if sent := cap.count(); sent != 1 {
+		t.Fatalf("%d pushes, want 1", sent)
+	}
+	msg := textOf(cap.bodies[0])
+	if !strings.Contains(msg, "บรู๊ตฟอร์ซ") {
+		t.Errorf("the playbook's display wording should win:\n%s", msg)
+	}
+	if !strings.Contains(msg, "ขออนุมัติ") {
+		t.Errorf("approval note missing:\n%s", msg)
+	}
+	if strings.Contains(msg, "×2") {
+		t.Errorf("×N must count alerts, not actions:\n%s", msg)
+	}
+}
+
 // An incident whose playbook has no notify step must still reach the phone.
 func TestApprovalOnlyStillNotifies(t *testing.T) {
 	ts, cap := newStub(200)

@@ -82,6 +82,10 @@ func actionNotify(fields map[string]interface{}, template string, actions []stri
 	for k, v := range fields {
 		f[k] = v
 	}
+	// Keep the ORIGINAL alert title for aggregation: the template below rewrites
+	// the display title, while the approval path sees the raw fields. Keying the
+	// notification on the display title split one incident into two messages.
+	f["_group_title"] = str(fields["title"])
 	if template != "" {
 		if t := strings.TrimSpace(gatedFormat(template, fields, disclosureLevel())); t != "" {
 			f["title"] = t
