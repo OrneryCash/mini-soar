@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS playbook_history (id INTEGER PRIMARY KEY AUTOINCREMEN
 }
 
 func auditInsert(table string, cols map[string]interface{}) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
 	keys := make([]string, 0, len(cols))
 	for k := range cols {
 		keys = append(keys, k)

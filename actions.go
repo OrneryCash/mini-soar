@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,29 +57,11 @@ func humanActionDetail(r Action) string {
 }
 
 // ------------------------------------------------------------------ extraction
-
-func lineNotify(message string) map[string]interface{} {
-	if CONFIG.LineToken == "" {
-		return map[string]interface{}{"status": "simulated", "detail": "LINE token not set — notification simulated"}
-	}
-	if CONFIG.LineTarget == "" {
-		return map[string]interface{}{"status": "simulated", "detail": "LINE target user ID not set — notification simulated"}
-	}
-	body, _ := json.Marshal(map[string]interface{}{
-		"to":       CONFIG.LineTarget,
-		"messages": []map[string]string{{"type": "text", "text": message}},
-	})
-	req, _ := http.NewRequest("POST", "https://api.line.me/v2/bot/message/push", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+CONFIG.LineToken)
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return map[string]interface{}{"status": "error", "detail": err.Error()}
-	}
-	defer resp.Body.Close()
-	return map[string]interface{}{"status": "sent", "detail": fmt.Sprintf("HTTP %d", resp.StatusCode)}
-}
+//
+// Notification delivery lives in line.go (status vocabulary, retry, truncation,
+// quota, renderer) and line_agg.go (aggregation + send-time policy). The old
+// lineNotify() was removed: it never checked the HTTP status, so a 401 was
+// recorded as "sent".
 
 func safeFormat(tpl string, fields map[string]interface{}) string {
 	return safeFormatRe.ReplaceAllStringFunc(tpl, func(m string) string {
@@ -92,23 +73,27 @@ func safeFormat(tpl string, fields map[string]interface{}) string {
 	})
 }
 
-func actionNotify(fields map[string]interface{}, template string, alertID int64, playbook string) map[string]interface{} {
-	msg := template
-	if msg != "" {
-		msg = safeFormat(template, fields)
-	} else {
-		msg = "Alert: " + str(fields["title"])
+// actionNotify queues one notification for this incident. The playbook's
+// wording becomes the event line, expanded through the disclosure gate so a
+// template written with {user}/{hash}/{url} cannot leak personal data at
+// disclosure=minimal (design §7).
+func actionNotify(fields map[string]interface{}, template string, actions []string, alertID int64, playbook string) map[string]interface{} {
+	f := map[string]interface{}{}
+	for k, v := range fields {
+		f[k] = v
 	}
-	result := lineNotify(msg)
-	detail := map[string]interface{}{"message": msg}
-	for k, v := range result {
-		detail[k] = v
+	if template != "" {
+		if t := strings.TrimSpace(gatedFormat(template, fields, disclosureLevel())); t != "" {
+			f["title"] = t
+		}
 	}
-	dj, _ := json.Marshal(detail)
-	_, _ = auditInsert("actions", map[string]interface{}{
-		"ts": nowISO(), "alert_id": alertID, "playbook": playbook, "action": "notify", "detail": string(dj),
-	})
-	return result
+	if strings.TrimSpace(str(f["title"])) == "" {
+		f["title"] = "พบเหตุการณ์ผิดปกติ"
+	}
+	if len(actions) == 0 {
+		actions = []string{"notify"}
+	}
+	return lineNotifyFor(f, actions, alertID, playbook, alertID)
 }
 
 func actionBlockIP(fields map[string]interface{}, ipField string, duration int, alertID int64, playbook string) map[string]interface{} {

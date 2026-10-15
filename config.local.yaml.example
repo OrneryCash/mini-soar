@@ -1,0 +1,24 @@
+# Copy this file to config.local.yaml and fill in your own values.
+#
+# config.local.yaml is GITIGNORED. It is the ONLY place a LINE credential may
+# live — config.yaml is tracked and the repository is public.
+#
+# This overlay is merged on top of config.yaml at startup, and the environment
+# variables LINE_CHANNEL_TOKEN / LINE_TARGET_ID override both.
+line:
+  # LINE Developers console → your Messaging API channel → Channel access token
+  channel_access_token: "PASTE_YOUR_CHANNEL_ACCESS_TOKEN_HERE"
+
+  # Where alerts go. `to` accepts three kinds of ID:
+  #   U... = one person          (console → "Your user ID", available instantly)
+  #   C... = a group chat        (arrives only in a webhook event → source.groupId)
+  #   R... = a multi-person room (same as group)
+  #
+  # NOTE: quota counts PER RECIPIENT, so a 3-person group costs 3 messages per
+  # alert — the same as messaging three people. A group is convenient, not cheap.
+  target_id: "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+  # Optional: override the non-secret policy from config.yaml for this site only.
+  # disclosure: minimal
+  # severity_floor: 7
+  # daily_cap: 10

@@ -13,13 +13,24 @@ db_path: data/minisoar.db
 # Evidence preservation folder
 evidence_dir: evidence
 
-# LINE Messaging API (LINE Notify was discontinued 2025-03-31 — dead endpoint).
-# Create a LINE Official Account → Messaging API channel → get channel access token
-# + the recipient's user ID (LINE Notify-style per-user tokens no longer exist).
-# Empty token/user-id = notifications are simulated (logged + shown in UI)
-# so the demo works without a LINE account.
-line_channel_token: ""
-line_target_user_id: ""
+# ---------------------------------------------------------------- LINE OA
+# ⚠️ This file is TRACKED by git and the repo is public — never put a secret here.
+# The channel access token and the target ID belong in config.local.yaml
+# (gitignored), or in the LINE_CHANNEL_TOKEN / LINE_TARGET_ID environment vars.
+# LINE Notify was discontinued 2025-03-31; this is the Messaging API.
+#
+# Quota is counted PER RECIPIENT: a 3-person group costs 3 messages per alert,
+# so a group is a convenience choice, not a saving.
+line:
+  enabled: true
+  disclosure: minimal       # minimal | standard | full — see the LINE page
+  severity_floor: 7         # do not push below this severity
+  daily_cap: 10             # MESSAGES per day (not incidents)
+  aggregate_seconds: 30     # collapse a burst into ONE message carrying ×N
+  quiet_hours:
+    from: "22:00"
+    to: "07:00"
+    floor: 12               # only >= this severity breaks the quiet window
 
 # Firewall backend: "simulated" (safe demo, no real blocking)
 # or "iptables" (Linux only, real stateful block with auto-expiry)

@@ -109,11 +109,11 @@ func checkExpiredApprovals() []map[string]interface{} {
 			if who == "" {
 				who = str(fields["host"])
 			}
-			actionNotify(fields, "⏰ ครบเวลารออนุมัติ — ระบบดำเนินการอัตโนมัติ: "+who, row.AlertID, row.Playbook)
+			actionNotify(fields, "⏰ ครบเวลารออนุมัติ — ระบบดำเนินการอัตโนมัติ: "+who, []string{row.Action}, row.AlertID, row.Playbook)
 			acted = append(acted, map[string]interface{}{"approval_id": row.ID, "status": "auto_executed", "block": res})
 		} else {
 			_, _ = db.Exec("UPDATE approvals SET status='escalated' WHERE id=?", row.ID)
-			actionNotify(map[string]interface{}{}, fmt.Sprintf("🚨 คำขออนุมัติใบที่ %d ยังไม่ได้รับการตัดสินใจ — กรุณารีบตัดสินใจ", row.ID), row.AlertID, row.Playbook)
+			actionNotify(map[string]interface{}{}, fmt.Sprintf("🚨 คำขออนุมัติใบที่ %d ยังไม่ได้รับการตัดสินใจ — กรุณารีบตัดสินใจ", row.ID), []string{row.Action}, row.AlertID, row.Playbook)
 			acted = append(acted, map[string]interface{}{"approval_id": row.ID, "status": "escalated"})
 		}
 	}

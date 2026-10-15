@@ -52,3 +52,34 @@ type PlaybooksData struct {
 type ApprovalsData struct{ Rows []Approval }
 
 type AuditData struct{ Rows []Action }
+
+// LineData powers the LINE OA settings / status page.
+type LineData struct {
+	Enabled        bool
+	Configured     bool
+	Simulated      bool
+	TargetMasked   string
+	TargetKind     string
+	Disclosure     string
+	SeverityFloor  int
+	DailyCap       int
+	SentToday      int
+	QuietFrom      string
+	QuietTo        string
+	QuietFloor     int
+	InQuiet        bool
+	QuotaLimit     int
+	QuotaUsed      int
+	QuotaKnown     bool
+	QuotaNote      string
+	LastStatus     string
+	LastDetail     string
+	LastTs         string
+	FailureBanner  string
+	DisclosureRows []DisclosureRow
+}
+
+// DisclosureRow renders the design §7 field table.
+type DisclosureRow struct {
+	Field, Minimal, Standard, Full string
+}

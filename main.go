@@ -22,7 +22,7 @@ func loadPages() {
 		},
 	}
 	pages = map[string]*template.Template{}
-	for _, p := range []string{"dashboard", "playbooks", "approvals", "audit"} {
+	for _, p := range []string{"dashboard", "playbooks", "approvals", "audit", "line"} {
 		t, err := template.New("base.html").Funcs(funcs).ParseFiles(
 			filepath.Join(BASE, "templates", "base.html"),
 			filepath.Join(BASE, "templates", p+".html"))
@@ -80,6 +80,7 @@ func main() {
 	mux.HandleFunc("GET /playbooks", handlePlaybooksPage)
 	mux.HandleFunc("GET /approvals", handleApprovalsPage)
 	mux.HandleFunc("GET /audit", handleAuditPage)
+	mux.HandleFunc("GET /line", handleLinePage)
 	mux.HandleFunc("POST /api/playbooks/{name}/toggle", handleToggle)
 	mux.HandleFunc("GET /api/playbooks", handleAPIList)
 	mux.HandleFunc("GET /api/playbooks/{name}", handleAPIGet)
@@ -94,6 +95,8 @@ func main() {
 	mux.HandleFunc("GET /api/actions", handleAPIActions)
 	mux.HandleFunc("GET /api/approvals", handleAPIApprovals)
 	mux.HandleFunc("GET /api/stats", handleAPIStats)
+	mux.HandleFunc("POST /api/line/test", handleLineTest)
+	mux.HandleFunc("POST /api/line/send", handleLineSendTest)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(BASE, "static")))))
 
 	port := CONFIG.Server.Port

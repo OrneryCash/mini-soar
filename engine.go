@@ -5,6 +5,20 @@ import (
 	"strings"
 )
 
+// bookActions returns the playbook's distinct actions, in order — used for the
+// "การดำเนินการ" line of the notification.
+func bookActions(book *Playbook) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, s := range book.Steps {
+		if !seen[s.Action] {
+			seen[s.Action] = true
+			out = append(out, s.Action)
+		}
+	}
+	return out
+}
+
 func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string]interface{}, alertID int64) []map[string]interface{} {
 	results := []map[string]interface{}{}
 	gateDefault := book.Gate
@@ -15,6 +29,7 @@ func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string
 	if name == "" {
 		name = "unnamed"
 	}
+	acts := bookActions(book)
 	for _, step := range book.Steps {
 		gate := gateDefault
 		if step.Gate != "" {
@@ -22,13 +37,13 @@ func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string
 		}
 		switch step.Action {
 		case "notify":
-			results = append(results, actionNotify(fields, strParam(step.Params, "template", ""), alertID, name))
+			results = append(results, actionNotify(fields, strParam(step.Params, "template", ""), acts, alertID, name))
 		case "preserve_evidence":
 			results = append(results, actionEvidence(fields, alert, alertID, name))
 		case "block_ip":
 			if gate == "human" {
 				aid := queueApproval("block_ip", step.Params, fields, alertID, name)
-				actionNotify(fields, "🔔 ขออนุมัติบล็อก IP "+str(fields["src_ip"])+" — กรุณายืนยัน", alertID, name)
+				actionNotify(fields, "🔔 ขออนุมัติบล็อก IP "+str(fields["src_ip"])+" — กรุณายืนยัน", acts, alertID, name)
 				results = append(results, map[string]interface{}{"status": "pending_approval", "approval_id": aid,
 					"detail": "block_ip queued for approval (" + name + ")"})
 			} else {
@@ -38,7 +53,7 @@ func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string
 		case "isolate_host":
 			if gate == "human" {
 				aid := queueApproval("isolate_host", step.Params, fields, alertID, name)
-				actionNotify(fields, "🛑 ขออนุมัติแยกโฮสต์ "+str(fields["host"])+" — มีผลกระทบต่อระบบ", alertID, name)
+				actionNotify(fields, "🛑 ขออนุมัติแยกโฮสต์ "+str(fields["host"])+" — มีผลกระทบต่อระบบ", acts, alertID, name)
 				results = append(results, map[string]interface{}{"status": "pending_approval", "approval_id": aid,
 					"detail": "isolate_host queued for approval (" + name + ")"})
 			} else {

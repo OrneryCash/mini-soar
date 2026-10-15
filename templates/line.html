@@ -1,0 +1,156 @@
+{{define "title"}}LINE OA{{end}}
+{{define "content"}}
+<div class="toolbar">
+  <h2 style="font-size:20px;color:#0d2b4e;">แจ้งเตือนผ่าน LINE OA</h2>
+  <div>
+    <button class="btn btn-test" id="btn-test" onclick="runTest()">ทดสอบการเชื่อมต่อ</button>
+    <button class="btn btn-primary" id="btn-send" onclick="sendTest()">ส่งข้อความทดสอบจริง (ใช้โควตา 1)</button>
+  </div>
+</div>
+
+{{if .FailureBanner}}
+<div class="errors" id="failure-banner">⚠️ {{.FailureBanner}}</div>
+{{end}}
+
+<div class="cards">
+  <div class="card">
+    <div class="num" style="font-size:20px;{{if .Configured}}color:#1e7a3c{{else}}color:#a05a00{{end}}">
+      {{if .Configured}}เชื่อมต่อแล้ว{{else}}จำลอง (ยังไม่ตั้งค่า){{end}}
+    </div>
+    <div class="lbl">สถานะช่องทางแจ้งเตือน</div>
+  </div>
+  <div class="card">
+    <div class="num" style="font-size:20px;" id="quota-num">
+      {{if .QuotaKnown}}{{.QuotaLimit}}{{else}}—{{end}}
+    </div>
+    <div class="lbl">โควตาข้อความต่อเดือน (กดทดสอบเพื่ออ่านค่าจริง)</div>
+  </div>
+  <div class="card">
+    <div class="num" style="font-size:20px;">{{.SentToday}} / {{.DailyCap}}</div>
+    <div class="lbl">ข้อความที่ส่งวันนี้ (เพดานต่อวัน)</div>
+  </div>
+  <div class="card">
+    <div class="num" style="font-size:20px;">
+      {{if .InQuiet}}🌙 เงียบ{{else}}ปกติ{{end}}
+    </div>
+    <div class="lbl">ช่วงเวลาเงียบ {{.QuietFrom}}–{{.QuietTo}} (ต่ำกว่าระดับ {{.QuietFloor}} จะไม่ส่ง)</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="font-size:16px;color:#0d2b4e;margin-bottom:12px;">การตั้งค่าปัจจุบัน</h3>
+  <table>
+    <tr><th style="width:260px;">รายการ</th><th>ค่า</th></tr>
+    <tr><td>ช่องทาง</td><td>{{if .Enabled}}เปิดใช้งาน{{else}}ปิดใช้งาน{{end}}</td></tr>
+    <tr><td>ปลายทาง</td><td class="mono">{{if .TargetMasked}}{{.TargetMasked}}{{else}}ยังไม่ได้ตั้งค่า{{end}} · {{.TargetKind}}</td></tr>
+    <tr><td>ระดับความรุนแรงขั้นต่ำ</td><td>{{.SeverityFloor}} (ต่ำกว่านี้จะไม่แจ้ง)</td></tr>
+    <tr><td>เพดานต่อวัน</td><td>{{.DailyCap}} ข้อความ (นับเป็นข้อความ ไม่ใช่เหตุการณ์)</td></tr>
+    <tr><td>การเปิดเผยข้อมูล</td><td><strong>{{.Disclosure}}</strong></td></tr>
+    <tr><td>การส่งครั้งล่าสุด</td><td>
+      {{if .LastStatus}}
+        <span class="tag {{if eq .LastStatus "sent"}}on{{else if eq .LastStatus "simulated"}}on{{else}}off{{end}}">{{.LastStatus}}</span>
+        <span class="time mono" data-ts="{{.LastTs}}">{{.LastTs}}</span>
+        <div class="mono" style="margin-top:4px;">{{.LastDetail}}</div>
+      {{else}}ยังไม่มีการส่ง{{end}}
+    </td></tr>
+    <tr><td>โควตาคงเหลือ (อ่านจาก LINE)</td><td id="quota-cell">
+      {{if .QuotaKnown}}ใช้ไป {{.QuotaUsed}} จาก {{.QuotaLimit}}{{else}}— ยังไม่ได้อ่าน (กดทดสอบการเชื่อมต่อ){{end}}
+    </td></tr>
+  </table>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="font-size:16px;color:#0d2b4e;margin-bottom:6px;">หลักการเปิดเผยข้อมูล (PDPA)</h3>
+  <p style="font-size:13px;color:#5a6b82;margin-bottom:12px;">
+    ข้อความ LINE <strong>อ้างอิงเหตุการณ์ ไม่ใช่ตัวข้อมูล</strong> — ส่งเฉพาะสิ่งที่บอกว่าเกิดอะไรและไปดูที่ไหน
+    รายละเอียดอยู่ในหน้าจอของคลินิกภายใต้การควบคุมการเข้าถึง การส่งข้อมูลส่วนบุคคลไปยัง LINE
+    ถือเป็นการเปิดเผยต่อบุคคลที่สามตาม PDPA มาตรา 37(4)
+  </p>
+  <table>
+    <tr><th>ข้อมูล</th><th style="width:110px;">minimal</th><th style="width:110px;">standard</th><th style="width:110px;">full</th></tr>
+    {{range .DisclosureRows}}
+    <tr><td>{{.Field}}</td><td>{{.Minimal}}</td><td>{{.Standard}}</td><td>{{.Full}}</td></tr>
+    {{end}}
+  </table>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="font-size:16px;color:#0d2b4e;margin-bottom:12px;">ขั้นตอนตั้งค่าครั้งแรก (ประมาณ 10 นาที)</h3>
+  <ol style="font-size:14px;line-height:1.9;padding-left:22px;color:#33415c;">
+    <li>สร้าง LINE Official Account (ฟรี) ที่ LINE Official Account Manager</li>
+    <li>สร้าง <strong>Messaging API channel</strong> → คัดลอก <strong>channel access token</strong></li>
+    <li>เพิ่ม OA เป็นเพื่อน หรือเชิญ OA เข้ากลุ่ม (ต้องเปิด “Allow joining group chats” ก่อน)</li>
+    <li>วาง token และ target ID ในไฟล์ <span class="mono">config.local.yaml</span> แล้วรีสตาร์ตบริการ</li>
+    <li>กลับมาที่หน้านี้ กด <strong>ทดสอบการเชื่อมต่อ</strong> → ควรเห็น token OK และ payload valid</li>
+    <li>กด <strong>ส่งข้อความทดสอบจริง</strong> เพื่อยืนยันว่าข้อความเข้าจริง</li>
+  </ol>
+  <p style="font-size:13px;color:#a05a00;background:#fdeeda;border-radius:8px;padding:10px 12px;margin-top:10px;">
+    ⚠️ <strong>ห้ามวางโทเคนในไฟล์ <span class="mono">config.yaml</span></strong> — ไฟล์นั้นถูกติดตามด้วย git และ repo เป็นสาธารณะ
+    ใช้ <span class="mono">config.local.yaml</span> เท่านั้น (อยู่ใน .gitignore)
+  </p>
+</div>
+
+<div class="card" id="test-panel" style="display:none;margin-bottom:18px;">
+  <h3 style="font-size:16px;color:#0d2b4e;margin-bottom:12px;">ผลการทดสอบ</h3>
+  <div id="test-body" style="font-size:14px;line-height:1.8;"></div>
+</div>
+
+<script>
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  async function runTest() {
+    const btn = document.getElementById('btn-test');
+    btn.disabled = true; btn.textContent = 'กำลังทดสอบ…';
+    const panel = document.getElementById('test-panel');
+    const body = document.getElementById('test-body');
+    try {
+      const r = await fetch('/api/line/test', {method: 'POST'});
+      const d = await r.json();
+      let html = '';
+      html += '<div><strong>โทเคน:</strong> ' + esc(d.token) + (d.quota_error ? ' — ' + esc(d.quota_error) : '') + '</div>';
+      if (d.remaining) html += '<div><strong>โควตาคงเหลือ:</strong> ' + esc(d.remaining) + '</div>';
+      html += '<div><strong>รูปแบบข้อความ:</strong> ' + esc(d.payload) + (d.payload_detail ? ' — ' + esc(d.payload_detail) : '') + '</div>';
+      if (d.note) html += '<div class="mono">' + esc(d.note) + '</div>';
+      if (d.sample_message) {
+        html += '<div style="margin-top:12px;"><strong>ตัวอย่างข้อความที่จะส่ง:</strong>' +
+                '<pre style="background:#f6f9fd;border:1px dashed #c9d6e6;border-radius:8px;padding:12px;margin-top:6px;white-space:pre-wrap;">' + esc(d.sample_message) + '</pre></div>';
+      }
+      body.innerHTML = html;
+      panel.style.display = 'block';
+      if (d.remaining) document.getElementById('quota-cell').textContent = 'ใช้ไป ' + (d.quota_used ?? '') + ' จาก ' + (d.quota_limit ?? '') + ' (คงเหลือ ' + d.remaining + ')';
+      if (d.quota_limit) document.getElementById('quota-num').textContent = d.quota_limit;
+    } catch (e) {
+      body.innerHTML = '<div style="color:#b02a2a;">ทดสอบไม่สำเร็จ: ' + esc(e) + '</div>';
+      panel.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'ทดสอบการเชื่อมต่อ';
+  }
+
+  async function sendTest() {
+    const btn = document.getElementById('btn-send');
+    if (!confirm('ส่งข้อความจริงไปยังปลายทางที่ตั้งไว้? การส่งนี้จะใช้โควตา 1 ข้อความ')) return;
+    btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+    const panel = document.getElementById('test-panel');
+    const body = document.getElementById('test-body');
+    try {
+      const r = await fetch('/api/line/send', {method: 'POST'});
+      const d = await r.json();
+      body.innerHTML = '<div><strong>สถานะการส่ง:</strong> ' + esc(d.status) +
+        (d.http_status ? ' (HTTP ' + esc(d.http_status) + ')' : '') +
+        (d.attempts ? ' · ลอง ' + esc(d.attempts) + ' ครั้ง' : '') + '</div>' +
+        '<div class="mono">' + esc(d.detail) + '</div>' +
+        (d.message ? '<pre style="background:#f6f9fd;border:1px dashed #c9d6e6;border-radius:8px;padding:12px;margin-top:8px;white-space:pre-wrap;">' + esc(d.message) + '</pre>' : '');
+      panel.style.display = 'block';
+      if (d.status !== 'sent' && d.status !== 'sent_truncated' && d.status !== 'simulated') {
+        body.innerHTML = '<div class="errors">⚠️ ส่งไม่สำเร็จ: ' + esc(d.status) + ' — ' + esc(d.detail) + '</div>' + body.innerHTML;
+      }
+    } catch (e) {
+      body.innerHTML = '<div style="color:#b02a2a;">ส่งไม่สำเร็จ: ' + esc(e) + '</div>';
+      panel.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'ส่งข้อความทดสอบจริง (ใช้โควตา 1)';
+  }
+
+  if (typeof convertTimes === 'function') convertTimes(true);
+</script>
+{{end}}

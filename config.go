@@ -7,32 +7,115 @@ import (
 	"regexp"
 )
 
+// QuietHours pauses non-critical pushes overnight.
+type QuietHours struct {
+	From  string `yaml:"from"`
+	To    string `yaml:"to"`
+	Floor int    `yaml:"floor"`
+}
+
+// LineConfig is the non-secret LINE policy. The credential and target live in
+// config.local.yaml (gitignored) or the environment — never in config.yaml,
+// which is tracked in a public repo.
+type LineConfig struct {
+	Enabled       *bool       `yaml:"enabled"`
+	Disclosure    string      `yaml:"disclosure"` // minimal | standard | full
+	SeverityFloor int         `yaml:"severity_floor"`
+	DailyCap      int         `yaml:"daily_cap"` // messages/day, not incidents
+	QuietHours    *QuietHours `yaml:"quiet_hours"`
+	AggregateSecs int         `yaml:"aggregate_seconds"`
+	ChannelToken  string      `yaml:"channel_access_token"`
+	TargetID      string      `yaml:"target_id"`
+	APIBase       string      `yaml:"api_base"` // test hook; empty = real LINE
+}
+
 type Config struct {
 	Server struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`
 	} `yaml:"server"`
-	PlaybooksDir  string `yaml:"playbooks_dir"`
-	DataDir       string `yaml:"data_dir"`
-	EvidenceDir   string `yaml:"evidence_dir"`
-	LineToken     string `yaml:"line_channel_token"`
-	LineTarget    string `yaml:"line_target_user_id"`
-	Firewall      string `yaml:"firewall_backend"`
-	BlockDefault  int    `yaml:"block_default_duration"`
-	ApprovalTO    int    `yaml:"approval_timeout_seconds"`
-	ApprovalMode  string `yaml:"approval_timeout_action"`
-	WebhookSecret string `yaml:"webhook_secret"`
-	DBPath        string `yaml:"db_path"`
+	PlaybooksDir  string     `yaml:"playbooks_dir"`
+	DataDir       string     `yaml:"data_dir"`
+	EvidenceDir   string     `yaml:"evidence_dir"`
+	Line          LineConfig `yaml:"line"`
+	Firewall      string     `yaml:"firewall_backend"`
+	BlockDefault  int        `yaml:"block_default_duration"`
+	ApprovalTO    int        `yaml:"approval_timeout_seconds"`
+	ApprovalMode  string     `yaml:"approval_timeout_action"`
+	WebhookSecret string     `yaml:"webhook_secret"`
+	DBPath        string     `yaml:"db_path"`
+
+	// Legacy flat keys (pre-`line:` schema). Still honoured so an existing
+	// deployment does not lose its target on upgrade.
+	LineTokenLegacy  string `yaml:"line_channel_token"`
+	LineTargetLegacy string `yaml:"line_target_user_id"`
+
+	// Resolved delivery values — what the rest of the app reads.
+	LineToken  string `yaml:"-"`
+	LineTarget string `yaml:"-"`
 }
 
 var BASE string
 
+// mergeLineOverlay copies only the fields the overlay actually set, so a
+// one-line config.local.yaml does not blank the tracked policy.
+func mergeLineOverlay(dst, o *Config) {
+	if o.Line.Enabled != nil {
+		dst.Line.Enabled = o.Line.Enabled
+	}
+	if o.Line.Disclosure != "" {
+		dst.Line.Disclosure = o.Line.Disclosure
+	}
+	if o.Line.SeverityFloor != 0 {
+		dst.Line.SeverityFloor = o.Line.SeverityFloor
+	}
+	if o.Line.DailyCap != 0 {
+		dst.Line.DailyCap = o.Line.DailyCap
+	}
+	if o.Line.AggregateSecs != 0 {
+		dst.Line.AggregateSecs = o.Line.AggregateSecs
+	}
+	if o.Line.QuietHours != nil {
+		dst.Line.QuietHours = o.Line.QuietHours
+	}
+	if o.Line.ChannelToken != "" {
+		dst.Line.ChannelToken = o.Line.ChannelToken
+	}
+	if o.Line.TargetID != "" {
+		dst.Line.TargetID = o.Line.TargetID
+	}
+	if o.Line.APIBase != "" {
+		dst.Line.APIBase = o.Line.APIBase
+	}
+	if o.Firewall != "" {
+		dst.Firewall = o.Firewall
+	}
+}
+
 func loadConfig() Config {
 	var c Config
-	b, err := os.ReadFile(filepath.Join(BASE, "config.yaml"))
-	if err == nil {
+	if b, err := os.ReadFile(filepath.Join(BASE, "config.yaml")); err == nil {
 		_ = yaml.Unmarshal(b, &c)
 	}
+	// Per-site overlay: gitignored, holds the credential + target.
+	if b, err := os.ReadFile(filepath.Join(BASE, "config.local.yaml")); err == nil {
+		var o Config
+		if yaml.Unmarshal(b, &o) == nil {
+			mergeLineOverlay(&c, &o)
+		}
+	}
+	// Environment wins over both — useful for containers and CI.
+	if v := os.Getenv("LINE_CHANNEL_TOKEN"); v != "" {
+		c.Line.ChannelToken = v
+	}
+	if v := os.Getenv("LINE_TARGET_ID"); v != "" {
+		c.Line.TargetID = v
+	}
+	if v := os.Getenv("LINE_API_BASE"); v != "" {
+		c.Line.APIBase = v
+	}
+
+	// Defaults
 	if c.PlaybooksDir == "" {
 		c.PlaybooksDir = "playbooks"
 	}
@@ -51,6 +134,38 @@ func loadConfig() Config {
 	if c.ApprovalMode == "" {
 		c.ApprovalMode = "hold"
 	}
+	if c.Line.Enabled == nil {
+		t := true
+		c.Line.Enabled = &t
+	}
+	if c.Line.Disclosure == "" {
+		c.Line.Disclosure = "minimal"
+	}
+	if c.Line.SeverityFloor == 0 {
+		c.Line.SeverityFloor = 7
+	}
+	if c.Line.DailyCap == 0 {
+		c.Line.DailyCap = 10
+	}
+	if c.Line.AggregateSecs == 0 {
+		c.Line.AggregateSecs = 30
+	}
+	if c.Line.QuietHours == nil {
+		c.Line.QuietHours = &QuietHours{From: "22:00", To: "07:00", Floor: 12}
+	}
+	if c.Line.APIBase == "" {
+		c.Line.APIBase = "https://api.line.me"
+	}
+
+	// Legacy flat keys are the last fallback.
+	if c.Line.ChannelToken == "" {
+		c.Line.ChannelToken = c.LineTokenLegacy
+	}
+	if c.Line.TargetID == "" {
+		c.Line.TargetID = c.LineTargetLegacy
+	}
+	c.LineToken = c.Line.ChannelToken
+	c.LineTarget = c.Line.TargetID
 	return c
 }
 
