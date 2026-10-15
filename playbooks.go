@@ -196,6 +196,8 @@ func numParam(p map[string]interface{}, key string, def int) int {
 	switch t := p[key].(type) {
 	case int:
 		return t
+	case int64: // JSON-derived fields and tests carry this; without it a severity of 0 is
+		return int(t) // returned and EVERY alert clears a min_severity floor - fail-open.
 	case float64:
 		return int(t)
 	case string:

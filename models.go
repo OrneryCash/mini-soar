@@ -36,6 +36,13 @@ type When struct {
 	Keywords    []string `yaml:"keywords,omitempty"`
 	MinSeverity int      `yaml:"min_severity,omitempty"`
 	NotIP       []string `yaml:"not_ip,omitempty"`
+
+	// Mitre selects the scenario by the SIEM's OWN technique classification, so the
+	// playbook carries no per-SIEM detection content. Stock Wazuh tags file deletion
+	// T1485 and a checksum change T1565.001 from its shipped ruleset; any other SIEM
+	// that tags the same technique matches the same playbook. The per-SIEM part —
+	// which JSON path carries the technique — lives in the field aliases, not here.
+	Mitre []string `yaml:"mitre,omitempty"`
 }
 
 type Step struct {

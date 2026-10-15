@@ -96,6 +96,10 @@ var aliases = map[string][]string{
 	"url":        {"data.url", "url.full", "url.domain", "url", "data.full_url", "data.reference"},
 	"rule_id":    {"rule.id", "rule_id", "event.code"},
 	"rule_group": {"rule.groups", "rule.group", "event.category", "rule.category", "rule_group"},
+	// The technique. Per-SIEM JSON paths live here, in one place — which is what lets a
+	// playbook name a technique and stay portable across SIEMs.
+	"mitre": {"rule.mitre.id", "mitre.id", "mitre.technique.id", "threat.technique.id",
+		"event.mitre.id", "data.mitre.id", "mitre_technique_id", "labels.mitre_id"},
 }
 
 func extractFields(a map[string]interface{}) map[string]interface{} {

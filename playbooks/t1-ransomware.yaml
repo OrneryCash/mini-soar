@@ -13,7 +13,23 @@ locks:
   # The form shows แยกโฮสต์ as locked (🔒) and it stays ต้องอนุมัติ always.
   isolate_host: human
 when:
-  pattern: 'ransom|encrypt|mass file change|wannacry|lockbit|notpetya|\.encrypted|\.locked'
+  # Scenario selection by the SIEM's OWN MITRE classification. No detection content is
+  # installed into Wazuh — its stock rules already tag both halves of an encryption attack:
+  #   553 File deleted     -> T1070.004, T1485 (Data Destruction)      level 7
+  #   550 Checksum changed -> T1565.001 (Stored Data Manipulation)     level 7
+  # so this matches vanilla Wazuh, and any other SIEM that tags the same techniques.
+  # T1486 is listed for SIEMs that classify encryption directly.
+  #
+  # Stated plainly: with no upstream correlation rule the SOAR now sees EVERY tagged file
+  # event rather than one verdict. That is the deliberate trade for having no per-SIEM
+  # detection content, and mini-SOAR absorbs it by folding identical notifications and
+  # aggregating approvals. It costs precision — an administrator's bulk delete looks the
+  # same — which is what canary files are for.
+  mitre:
+    - T1485      # Data Destruction - originals and shadow copies deleted
+    - T1565.001  # Stored Data Manipulation - files rewritten in place
+    - T1486      # Data Encrypted for Impact - for SIEMs that classify encryption
+  min_severity: 7
 steps:
   - action: notify
     params:
