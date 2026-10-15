@@ -14,10 +14,10 @@
 
 <div class="cards">
   <div class="card">
-    <div class="num" style="font-size:20px;{{if .Configured}}color:#1e7a3c{{else}}color:#a05a00{{end}}">
-      {{if .Configured}}เชื่อมต่อแล้ว{{else}}จำลอง (ยังไม่ตั้งค่า){{end}}
+    <div class="num" style="font-size:20px;{{if eq .ChannelState "ok"}}color:#1e7a3c{{else if eq .ChannelState "failed"}}color:#b02a2a{{else}}color:#a05a00{{end}}">
+      {{.ChannelLabel}}
     </div>
-    <div class="lbl">สถานะช่องทางแจ้งเตือน</div>
+    <div class="lbl">สถานะช่องทาง (จากการทดสอบจริง ไม่ใช่แค่ตั้งค่าแล้ว)</div>
   </div>
   <div class="card">
     <div class="num" style="font-size:20px;" id="quota-num">
@@ -52,6 +52,13 @@
         <span class="time mono" data-ts="{{.LastTs}}">{{.LastTs}}</span>
         <div class="mono" style="margin-top:4px;">{{.LastDetail}}</div>
       {{else}}ยังไม่มีการส่ง{{end}}
+    </td></tr>
+    <tr><td>ผลการทดสอบการเชื่อมต่อล่าสุด</td><td>
+      {{if .LastTestStatus}}
+        <span class="tag {{if eq .LastTestStatus "ok"}}on{{else}}off{{end}}">{{if eq .LastTestStatus "ok"}}ผ่าน{{else}}ไม่ผ่าน{{end}}</span>
+        <span class="time mono" data-ts="{{.LastTestTs}}">{{.LastTestTs}}</span>
+        <div class="mono" style="margin-top:4px;">{{.LastTestDetail}}</div>
+      {{else}}<span style="color:#8a97ab;">ยังไม่เคยทดสอบ — กด “ทดสอบการเชื่อมต่อ”</span>{{end}}
     </td></tr>
     <tr><td>โควตาคงเหลือ (อ่านจาก LINE)</td><td id="quota-cell">
       {{if .QuotaKnown}}ใช้ไป {{.QuotaUsed}} จาก {{.QuotaLimit}}{{else}}— ยังไม่ได้อ่าน (กดทดสอบการเชื่อมต่อ){{end}}

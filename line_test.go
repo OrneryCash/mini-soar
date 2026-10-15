@@ -436,3 +436,63 @@ func TestNotifyAuditDetailCarriesStatus(t *testing.T) {
 	}
 	_ = it
 }
+
+// ---------------------------------------------------------------- observed state
+//
+// The bug this replaces reported "เชื่อมต่อแล้ว" purely because both fields were
+// non-empty — for a token LINE had already rejected with 401.
+
+func TestObservedState(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		configured bool
+		testStatus string
+		want       string
+	}{
+		{"no token or target", false, "", "unconfigured"},
+		{"configured, never tested", true, "", "untested"},
+		{"last test passed", true, "ok", "ok"},
+		{"last test failed", true, "failed", "failed"},
+	} {
+		d := LineData{Configured: c.configured, LastTestStatus: c.testStatus}
+		observedState(&d)
+		if d.ChannelState != c.want {
+			t.Errorf("%s: state=%q want %q (label %q)", c.name, d.ChannelState, c.want, d.ChannelLabel)
+		}
+		if d.ChannelLabel == "" {
+			t.Errorf("%s: empty label", c.name)
+		}
+	}
+}
+
+func TestChannelBannerPrefersNewestFailure(t *testing.T) {
+	// A failed verification with no delivery yet -> its own banner.
+	d := LineData{Configured: true, LastTestStatus: "failed",
+		LastTestDetail: "auth_error", LastTestTs: "2026-10-15T06:00:00+00:00"}
+	if b := channelBanner(d); !strings.Contains(b, "auth_error") {
+		t.Errorf("want the test-failure banner, got %q", b)
+	}
+
+	// A NEWER delivery failure -> the delivery banner.
+	d2 := LineData{Configured: true,
+		LastTestStatus: "failed", LastTestTs: "2026-10-15T06:00:00+00:00",
+		LastStatus: stAuthError, LastDetail: "HTTP 401", LastTs: "2026-10-15T07:00:00+00:00"}
+	if b := channelBanner(d2); !strings.Contains(b, "โทเคนไม่ถูกต้อง") {
+		t.Errorf("want the delivery banner, got %q", b)
+	}
+
+	// Everything fine -> no banner.
+	d3 := LineData{Configured: true,
+		LastTestStatus: "ok", LastTestTs: "2026-10-15T06:00:00+00:00",
+		LastStatus: stSent, LastTs: "2026-10-15T07:00:00+00:00"}
+	if b := channelBanner(d3); b != "" {
+		t.Errorf("want no banner, got %q", b)
+	}
+
+	// Unconfigured (simulated) is not a failure.
+	d4 := LineData{}
+	observedState(&d4)
+	if b := channelBanner(d4); b != "" {
+		t.Errorf("unconfigured should not raise a banner, got %q", b)
+	}
+}

@@ -77,6 +77,13 @@ type LineData struct {
 	LastTs         string
 	FailureBanner  string
 	DisclosureRows []DisclosureRow
+
+	// What was actually OBSERVED, as opposed to merely "the fields are set".
+	ChannelState   string // unconfigured | untested | ok | failed
+	ChannelLabel   string
+	LastTestStatus string
+	LastTestDetail string
+	LastTestTs     string
 }
 
 // DisclosureRow renders the design §7 field table.
