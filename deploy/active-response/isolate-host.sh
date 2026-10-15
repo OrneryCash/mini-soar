@@ -48,8 +48,29 @@ fi
 
 isolated() { iptables -C INPUT -j "$CHAIN" >/dev/null 2>&1; }
 
+# arm_self_expiry schedules the revert ON THIS HOST, so recovery does not depend on the
+# manager ever calling back. The unit name is UNIQUE per run: with a fixed name a second run
+# collides with the previous transient unit and systemd-run refuses — which is exactly how
+# end-host2 ended up isolated with NO TTL and only a WARN in the log.
+arm_self_expiry() {
+    EXPIRY_UNIT="minisoar-unisolate-$(date +%s)-$$"
+    systemd-run --on-active="${TTL}s" --collect --unit="$EXPIRY_UNIT" "$SELF" --undo \
+        >/dev/null 2>&1 || return 1
+    # Arming is a claim until verified: confirm systemd really scheduled it.
+    systemctl is-active --quiet "$EXPIRY_UNIT.timer" || return 1
+    return 0
+}
+
 do_isolate() {
     if isolated; then log "already isolated, nothing to do"; return 0; fi
+    # FAIL SAFE. A host that cannot be un-isolated is worse than a host left un-isolated, so
+    # the expiry is armed AND verified BEFORE any rule is applied. If it cannot be armed we
+    # refuse and say so, rather than cutting a machine off with no way back.
+    if ! arm_self_expiry; then
+        log "REFUSING to isolate: self-expiry could not be armed (host would be unrecoverable)"
+        echo "isolate-host: refusing to isolate - self-expiry could not be armed" >&2
+        exit 1
+    fi
     iptables -N "$CHAIN" 2>/dev/null
     iptables -F "$CHAIN"
     iptables -A "$CHAIN" -i lo -j ACCEPT
@@ -63,11 +84,7 @@ do_isolate() {
     iptables -I INPUT   1 -j "$CHAIN"
     iptables -I OUTPUT  1 -j "$CHAIN"
     iptables -I FORWARD 1 -j "$CHAIN"
-    log "ISOLATED — allow=[$ALLOW_IPS] ttl=${TTL}s"
-    # Self-expiry, independent of the manager. If the revert call never arrives the
-    # host must not stay cut off; systemd-run outlives this script.
-    systemd-run --on-active="${TTL}s" --collect --unit="$UNIT" "$SELF" --undo \
-        >/dev/null 2>&1 || log "WARN: could not arm the self-expiry timer"
+    log "ISOLATED — allow=[$ALLOW_IPS] ttl=${TTL}s expiry=$EXPIRY_UNIT"
 }
 
 do_undo() {
@@ -77,7 +94,10 @@ do_undo() {
     iptables -D FORWARD -j "$CHAIN" 2>/dev/null
     iptables -F "$CHAIN" 2>/dev/null
     iptables -X "$CHAIN" 2>/dev/null
-    systemctl stop "$UNIT.timer" 2>/dev/null
+    # Cancel any expiry timer still armed for this host. Names carry the run's timestamp, so
+    # match by prefix rather than by one fixed name.
+    systemctl list-units --all --plain --no-legend --type=timer 'minisoar-unisolate*' 2>/dev/null \
+        | awk '{print $1}' | while read -r u; do systemctl stop "$u" >/dev/null 2>&1; done
     log "ISOLATION LIFTED"
 }
 
