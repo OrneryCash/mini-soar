@@ -209,7 +209,7 @@ func deliverAggregate(it *aggItem) LineResult {
 	// day's budget, so the operator was never told. The cap now applies only below
 	// capExemptSeverity, and a suppressed send is still recorded as `capped` so the
 	// omission stays visible rather than silent.
-	if ok, why := capAllows(sev, CONFIG.Line.DailyCap, lineMessagesSentToday()); !ok {
+	if ok, why := capAllows(sev, CONFIG.Line.DailyCap, lineMessagesSentToday(), hasContainment(it.actions)); !ok {
 		return LineResult{Status: stCapped, Detail: why}
 	}
 	msg := renderLineMessage(it.fields, it.actions, it.pending, it.count, it.incident, disclosureLevel())
@@ -248,22 +248,37 @@ func auditNotify(it *aggItem, res LineResult, status string) {
 }
 
 // capExemptSeverity: at or above this severity the daily message cap does not apply.
-// 12 is the UI's "สูง" (high) threshold and the level a ransomware verdict carries, so a
-// burst of noise can never spend the budget that a real incident needs.
 const capExemptSeverity = 12
+
+// hasContainment reports whether this incident's playbook will block or isolate something.
+func hasContainment(actions []string) bool {
+	for _, a := range actions {
+		if a == "block_ip" || a == "isolate_host" {
+			return true
+		}
+	}
+	return false
+}
 
 // capAllows decides whether the daily cap permits a send. Extracted from deliverAggregate
 // so the rule is unit-testable without a clock, a network call or a database.
-func capAllows(sev int64, cap, sentToday int) (bool, string) {
-	if cap <= 0 {
-		return true, "" // cap disabled
-	}
-	if sev >= capExemptSeverity {
+//
+// Two exemptions, both learned by measuring the lab:
+//   - a CONTAINMENT incident is never capped. It is the alert a clinic cannot afford to
+//     miss, and it is naturally rare — 476 file alerts from one ransomware attack folded
+//     into 3 messages, so folding already keeps the volume sustainable.
+//   - severity >= capExemptSeverity, for severe incidents with no containment step.
+//
+// Severity alone was the wrong test: the stock FIM signal that carries T1485 is level 7,
+// so a ransomware verdict fell below a severity-12 floor and was silently held for the
+// rest of the day.
+func capAllows(sev int64, cap, sentToday int, containment bool) (bool, string) {
+	if cap <= 0 || containment || sev >= capExemptSeverity {
 		return true, ""
 	}
 	if sentToday >= cap {
 		return false, fmt.Sprintf(
-			"daily cap reached (%d/%d messages today) and severity %d is below the cap-exempt floor %d",
+			"daily cap reached (%d/%d messages today); severity %d is below the cap-exempt floor %d and the incident carries no containment step",
 			sentToday, cap, sev, capExemptSeverity)
 	}
 	return true, ""
