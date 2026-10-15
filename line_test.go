@@ -358,12 +358,12 @@ func TestDisclosureMinimalExcludesPersonalData(t *testing.T) {
 	}
 	for _, secret := range []string{"somchai.j", "d41d8cd98f00b204e9800998ecf8427e",
 		"bad.example", "/var/www/html/shell.php", "203.0.113.5"} {
-		if strings.Contains(renderLineMessage(fields, []string{"block_ip"}, 1, 7, "minimal"), secret) {
+		if strings.Contains(renderLineMessage(fields, []string{"block_ip"}, nil, 1, 7, "minimal"), secret) {
 			t.Errorf("disclosure=minimal leaked %q", secret)
 		}
 	}
 	// The envelope must still be useful.
-	msg := renderLineMessage(fields, []string{"block_ip"}, 3, 7, "minimal")
+	msg := renderLineMessage(fields, []string{"block_ip"}, nil, 3, 7, "minimal")
 	for _, want := range []string{"HIS-01", "#7", "×3", "สูง"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("disclosure=minimal message is missing %q:\n%s", want, msg)
@@ -494,5 +494,80 @@ func TestChannelBannerPrefersNewestFailure(t *testing.T) {
 	observedState(&d4)
 	if b := channelBanner(d4); b != "" {
 		t.Errorf("unconfigured should not raise a banner, got %q", b)
+	}
+}
+
+// ---------------------------------------------------------------- message economy
+//
+// Measured on the lab: one incident cost TWO messages (the alert plus the
+// approval request), and a withheld field left a dangling label ("…จาก IP" with
+// nothing after it) in the message the user actually received.
+
+func TestApprovalFoldsIntoOneMessage(t *testing.T) {
+	ts, cap := newStub(200)
+	defer ts.Close()
+	restore := withLineConfig(ts.URL)
+	defer restore()
+
+	fields := map[string]interface{}{"title": "SSH brute force", "host": "end-host1",
+		"severity": int64(10), "src_ip": "10.200.12.23"}
+	acts := []string{"notify", "block_ip", "audit"}
+	const note = "ขออนุมัติ: บล็อกไอพี 10.200.12.23 — กรุณายืนยัน"
+
+	lineNotifyFor(fields, acts, 741, "t3-bruteforce", 741)
+	notifyApproval(fields, note, acts, 741, "t3-bruteforce", 741)
+
+	if groups := lineAgg.FlushAll(); groups != 1 {
+		t.Fatalf("one incident produced %d groups, want 1", groups)
+	}
+	if sent := cap.count(); sent != 1 {
+		t.Fatalf("one incident produced %d pushes, want 1", sent)
+	}
+	msg := textOf(cap.bodies[0])
+	if !strings.Contains(msg, "ขออนุมัติ") {
+		t.Errorf("the approval note is missing from the single message:\n%s", msg)
+	}
+	if strings.Contains(msg, "×2") {
+		t.Errorf("×N must count alerts, not actions:\n%s", msg)
+	}
+}
+
+// An incident whose playbook has no notify step must still reach the phone.
+func TestApprovalOnlyStillNotifies(t *testing.T) {
+	ts, cap := newStub(200)
+	defer ts.Close()
+	restore := withLineConfig(ts.URL)
+	defer restore()
+
+	fields := map[string]interface{}{"title": "SSH brute force", "host": "h", "severity": int64(10)}
+	notifyApproval(fields, "ขออนุมัติ: บล็อกไอพี x", []string{"block_ip"}, 1, "p", 1)
+	if groups := lineAgg.FlushAll(); groups != 1 {
+		t.Fatalf("approval-only produced %d groups, want 1", groups)
+	}
+	if got := textOf(cap.bodies[0]); !strings.Contains(got, "ขออนุมัติ") {
+		t.Errorf("approval note missing:\n%s", got)
+	}
+}
+
+// A withheld field must show a marker, not vanish and strand its label.
+func TestWithheldFieldShowsMarker(t *testing.T) {
+	fields := map[string]interface{}{"title": "brute force", "src_ip": "203.0.113.5"}
+	const tpl = "⚠️ {title} จาก IP {src_ip}"
+
+	got := gatedFormat(tpl, fields, "minimal")
+	if strings.Contains(got, "203.0.113.5") {
+		t.Errorf("disclosure=minimal leaked src_ip: %q", got)
+	}
+	if !strings.HasSuffix(got, "จาก IP "+withheldMarker) {
+		t.Errorf("minimal should leave a marker, not a dangling label: %q", got)
+	}
+
+	if got := gatedFormat(tpl, fields, "standard"); !strings.Contains(got, "203.0.113.5") {
+		t.Errorf("standard should include src_ip: %q", got)
+	}
+
+	// Substitution must not leave runs of spaces behind.
+	if got := gatedFormat("a  {user}  b", fields, "minimal"); strings.Contains(got, "  ") {
+		t.Errorf("double space left behind: %q", got)
 	}
 }

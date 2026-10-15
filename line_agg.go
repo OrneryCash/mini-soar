@@ -11,8 +11,8 @@ import (
 //
 // Measured volume was 122 playbook matches in a single day against a ~300/month
 // budget counted PER RECIPIENT — uncontrolled, the month is gone by lunchtime.
-// So one incident produces ONE message carrying ×N, reusing the same idea as the
-// approval dedup. A short debounce window is what makes a burst collapse.
+// So one incident produces ONE message carrying ×N. A short debounce window is
+// what makes a burst collapse.
 
 type aggItem struct {
 	key      string
@@ -23,6 +23,17 @@ type aggItem struct {
 	incident int64
 	playbook string
 	alertID  int64
+
+	// notified separates "a real alert opened this group" from "a pending
+	// approval note opened it", so ×N stays the number of ALERTS and is not
+	// inflated by the approval folded into the same message.
+	notified bool
+
+	// pending holds approval requests folded into this incident's single
+	// message. Measured on the lab: an incident cost 2 messages because the
+	// approval request was its own message. Folding it in halves the cost and
+	// loses nothing — the incident is still announced exactly once.
+	pending []string
 }
 
 type lineAggregator struct {
@@ -48,35 +59,66 @@ func (a *lineAggregator) windowOrDefault() time.Duration {
 	return 30 * time.Second
 }
 
+// aggKeyFor groups everything belonging to one incident. A notification and its
+// approval request must produce the SAME key, or they become two messages.
+func aggKeyFor(playbook string, fields map[string]interface{}, actions []string) string {
+	return fmt.Sprintf("%s|%s|%s|%v", playbook, str(fields["title"]), str(fields["host"]), actions)
+}
+
 // add queues an alert, collapsing repeats into one message with a count.
 // Returns the current count and whether this call started a new group.
 func (a *lineAggregator) add(it *aggItem) (int, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if existing, ok := a.items[it.key]; ok {
-		existing.count++
+		if existing.notified {
+			existing.count++
+		} else {
+			existing.notified = true
+		}
+		return existing.count, false
+	}
+	it.count = 1
+	it.notified = true
+	it.first = time.Now()
+	a.items[it.key] = it
+	time.AfterFunc(a.windowOrDefault(), func() { a.release(it.key) })
+	return 1, true
+}
+
+// addPending folds an approval request into the incident's message, creating the
+// group if the playbook has not notified yet.
+func (a *lineAggregator) addPending(it *aggItem, note string) (int, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if existing, ok := a.items[it.key]; ok {
+		existing.pending = append(existing.pending, note)
 		return existing.count, false
 	}
 	it.count = 1
 	it.first = time.Now()
+	it.pending = []string{note}
 	a.items[it.key] = it
-	w := a.windowOrDefault()
-	time.AfterFunc(w, func() { a.release(it.key) })
+	time.AfterFunc(a.windowOrDefault(), func() { a.release(it.key) })
 	return 1, true
 }
 
-// release flushes one group (used by the timer and by tests).
+// release flushes one group (used by the timer, by FlushAll and by tests).
 func (a *lineAggregator) release(key string) {
 	a.mu.Lock()
 	it, ok := a.items[key]
 	if ok {
 		delete(a.items, key)
 	}
+	fn := a.flush
 	a.mu.Unlock()
 	if !ok {
 		return
 	}
-	res := deliverAggregate(it)
+	if fn == nil {
+		fn = deliverAggregate
+	}
+	res := fn(it)
 	auditNotify(it, res, res.Status)
 }
 
@@ -96,17 +138,7 @@ func (a *lineAggregator) FlushAll() int {
 
 // deliverAggregate applies the send-time policy and performs the delivery.
 func deliverAggregate(it *aggItem) LineResult {
-	sev := int64(0)
-	if v, ok := it.fields["severity"]; ok {
-		switch n := v.(type) {
-		case int64:
-			sev = n
-		case int:
-			sev = int64(n)
-		case float64:
-			sev = int64(n)
-		}
-	}
+	sev := severityOf(it.fields)
 	// Quiet hours: hold back medium severity overnight, never critical.
 	if inQuietHours(time.Now()) {
 		q := CONFIG.Line.QuietHours
@@ -126,8 +158,7 @@ func deliverAggregate(it *aggItem) LineResult {
 				Detail: fmt.Sprintf("daily cap reached (%d/%d messages today)", sent, cap)}
 		}
 	}
-	level := disclosureLevel()
-	msg := renderLineMessage(it.fields, it.actions, it.count, it.incident, level)
+	msg := renderLineMessage(it.fields, it.actions, it.pending, it.count, it.incident, disclosureLevel())
 	return linePushText(msg)
 }
 
@@ -140,7 +171,7 @@ func disclosureLevel() string {
 }
 
 func auditNotify(it *aggItem, res LineResult, status string) {
-	msg := renderLineMessage(it.fields, it.actions, it.count, it.incident, disclosureLevel())
+	msg := renderLineMessage(it.fields, it.actions, it.pending, it.count, it.incident, disclosureLevel())
 	d := map[string]interface{}{
 		"message": msg,
 		"status":  status,
@@ -176,23 +207,25 @@ func severityOf(fields map[string]interface{}) int64 {
 	return 0
 }
 
-// lineNotifyFor is the entry point actions.go uses. It applies the severity
-// floor, then queues the alert for aggregation.
-func lineNotifyFor(fields map[string]interface{}, actions []string, incident int64, playbook string, alertID int64) map[string]interface{} {
+// notifyGate applies the cheap pre-send policy shared by both entry points.
+func notifyGate(fields map[string]interface{}) (bool, string) {
 	if CONFIG.Line.Enabled != nil && !*CONFIG.Line.Enabled {
-		return map[string]interface{}{"status": stSkipped, "detail": "LINE notifications disabled in config"}
+		return false, "LINE notifications disabled in config"
 	}
 	sev := severityOf(fields)
 	if floor := CONFIG.Line.SeverityFloor; floor > 0 && sev < int64(floor) {
-		return map[string]interface{}{
-			"status": stSkipped,
-			"detail": fmt.Sprintf("below severity floor (%d < %d)", sev, floor),
-		}
+		return false, fmt.Sprintf("below severity floor (%d < %d)", sev, floor)
 	}
-	// One message per host+event, not per raw alert.
-	key := fmt.Sprintf("%s|%s|%s|%v", playbook, str(fields["title"]), str(fields["host"]), actions)
+	return true, ""
+}
+
+// lineNotifyFor is the entry point actions.go uses for a notify step.
+func lineNotifyFor(fields map[string]interface{}, actions []string, incident int64, playbook string, alertID int64) map[string]interface{} {
+	if ok, why := notifyGate(fields); !ok {
+		return map[string]interface{}{"status": stSkipped, "detail": why}
+	}
 	it := &aggItem{
-		key: key, fields: fields, actions: actions,
+		key: aggKeyFor(playbook, fields, actions), fields: fields, actions: actions,
 		incident: incident, playbook: playbook, alertID: alertID,
 	}
 	n, created := lineAgg.add(it)
@@ -208,4 +241,23 @@ func lineNotifyFor(fields map[string]interface{}, actions []string, incident int
 		"detail": fmt.Sprintf("collapsed into the open notification (×%d)", n),
 		"count":  n,
 	}
+}
+
+// notifyApproval folds an approval request into the incident's single message
+// instead of spending a second one on it.
+func notifyApproval(fields map[string]interface{}, note string, actions []string, incident int64, playbook string, alertID int64) map[string]interface{} {
+	if ok, why := notifyGate(fields); !ok {
+		return map[string]interface{}{"status": stSkipped, "detail": why}
+	}
+	it := &aggItem{
+		key: aggKeyFor(playbook, fields, actions), fields: fields, actions: actions,
+		incident: incident, playbook: playbook, alertID: alertID,
+	}
+	n, created := lineAgg.addPending(it, note)
+	if created {
+		return map[string]interface{}{"status": stAggregated,
+			"detail": "queued with the incident notification", "count": 1}
+	}
+	return map[string]interface{}{"status": stAggregated,
+		"detail": fmt.Sprintf("folded into the incident notification (×%d)", n), "count": n}
 }

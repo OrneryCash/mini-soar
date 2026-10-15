@@ -246,20 +246,39 @@ func allowedForDisclosure(level, field string) bool {
 	}
 }
 
-// gatedFormat expands a playbook template but blanks any placeholder the
+// withheldMarker stands in for a field the disclosure level forbids. Blanking
+// it outright leaves dangling labels in the message ("…จาก IP" with no value),
+// which reads like a bug and hides the fact that a field was deliberately
+// withheld. A marker is honest and language-independent.
+const withheldMarker = "—"
+
+// tidyText collapses the whitespace a substitution can leave behind, without
+// touching line breaks.
+func tidyText(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.Join(strings.Fields(l), " ")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// gatedFormat expands a playbook template but replaces any placeholder the
 // current disclosure level forbids, so a template written with {user}/{hash}
 // cannot leak at `minimal`.
 func gatedFormat(tpl string, fields map[string]interface{}, level string) string {
-	return safeFormatRe.ReplaceAllStringFunc(tpl, func(m string) string {
+	out := safeFormatRe.ReplaceAllStringFunc(tpl, func(m string) string {
 		k := m[1 : len(m)-1]
 		if !allowedForDisclosure(level, k) {
-			return ""
+			return withheldMarker
 		}
 		if v, ok := fields[k]; ok {
-			return str(v)
+			if s := str(v); s != "" {
+				return s
+			}
 		}
-		return ""
+		return withheldMarker
 	})
+	return tidyText(out)
 }
 
 var thaiMonths = []string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
@@ -279,7 +298,7 @@ var actionThai = map[string]string{
 
 // renderLineMessage builds the fixed envelope (design §8). One renderer, so the
 // disclosure gate cannot be bypassed by a per-playbook template.
-func renderLineMessage(fields map[string]interface{}, actions []string, count int, incident int64, level string) string {
+func renderLineMessage(fields map[string]interface{}, actions []string, pending []string, count int, incident int64, level string) string {
 	sev := int64(0)
 	if v, ok := fields["severity"]; ok {
 		switch n := v.(type) {
@@ -322,6 +341,11 @@ func renderLineMessage(fields map[string]interface{}, actions []string, count in
 			line += fmt.Sprintf(" (×%d)", count)
 		}
 		b.WriteString(line + "\n")
+	}
+	for _, p := range pending {
+		if p = strings.TrimSpace(p); p != "" {
+			b.WriteString("⏳ " + p + "\n")
+		}
 	}
 	if incident > 0 {
 		fmt.Fprintf(&b, "เหตุการณ์: #%d\n", incident)

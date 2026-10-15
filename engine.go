@@ -43,7 +43,7 @@ func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string
 		case "block_ip":
 			if gate == "human" {
 				aid := queueApproval("block_ip", step.Params, fields, alertID, name)
-				actionNotify(fields, "🔔 ขออนุมัติบล็อก IP "+str(fields["src_ip"])+" — กรุณายืนยัน", acts, alertID, name)
+				notifyApproval(fields, "ขออนุมัติ: บล็อกไอพี "+str(fields["src_ip"])+" — กรุณายืนยันบนหน้าจอ mini-SOAR", acts, alertID, name, alertID)
 				results = append(results, map[string]interface{}{"status": "pending_approval", "approval_id": aid,
 					"detail": "block_ip queued for approval (" + name + ")"})
 			} else {
@@ -53,7 +53,7 @@ func runPlaybook(book *Playbook, alert map[string]interface{}, fields map[string
 		case "isolate_host":
 			if gate == "human" {
 				aid := queueApproval("isolate_host", step.Params, fields, alertID, name)
-				actionNotify(fields, "🛑 ขออนุมัติแยกโฮสต์ "+str(fields["host"])+" — มีผลกระทบต่อระบบ", acts, alertID, name)
+				notifyApproval(fields, "ขออนุมัติ: แยกโฮสต์ "+str(fields["host"])+" — มีผลกระทบต่อระบบ", acts, alertID, name, alertID)
 				results = append(results, map[string]interface{}{"status": "pending_approval", "approval_id": aid,
 					"detail": "isolate_host queued for approval (" + name + ")"})
 			} else {
