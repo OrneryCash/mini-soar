@@ -194,7 +194,7 @@ func handleLineTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload := renderLineMessage(
-		map[string]interface{}{"title": "ทดสอบการเชื่อมต่อ mini-SOAR", "host": "mini-soar", "severity": int64(10)},
+		map[string]interface{}{"title": "ทดสอบการเชื่อมต่อ Better Call SOAR", "host": "mini-soar", "severity": int64(10)},
 		[]string{"notify"}, nil, 1, 0, disclosureLevel())
 	out["sample_message"] = payload
 	vr := lineValidate(payload)
@@ -237,10 +237,10 @@ func handleLineSendTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := renderLineMessage(
-		map[string]interface{}{"title": "ทดสอบการแจ้งเตือน mini-SOAR", "host": "mini-soar", "severity": int64(10)},
+		map[string]interface{}{"title": "ทดสอบการแจ้งเตือน Better Call SOAR", "host": "mini-soar", "severity": int64(10)},
 		[]string{"notify"}, nil, 1, 0, disclosureLevel())
 	res := linePushText(msg)
-	it := &aggItem{fields: map[string]interface{}{"title": "ทดสอบการแจ้งเตือน mini-SOAR", "host": "mini-soar", "severity": int64(10)},
+	it := &aggItem{fields: map[string]interface{}{"title": "ทดสอบการแจ้งเตือน Better Call SOAR", "host": "mini-soar", "severity": int64(10)},
 		actions: []string{"notify"}, count: 1, playbook: "manual-test"}
 	auditNotify(it, res, res.Status)
 	writeJSON(w, 200, map[string]interface{}{

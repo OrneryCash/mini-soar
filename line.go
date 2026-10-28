@@ -350,7 +350,7 @@ func renderLineMessage(fields map[string]interface{}, actions []string, pending 
 	if incident > 0 {
 		fmt.Fprintf(&b, "เหตุการณ์: #%d\n", incident)
 	}
-	b.WriteString("— mini-SOAR")
+	b.WriteString("— Better Call SOAR")
 	return b.String()
 }
 

@@ -90,7 +90,7 @@ func str(v interface{}) string {
 var aliases = map[string][]string{
 	"src_ip":     {"data.srcip", "data.src_ip", "src_ip", "srcip", "source.ip", "source_ip", "data.source_ip", "data.src", "predecoded.srcip", "event.src_ip"},
 	"dst_ip":     {"data.dstip", "data.dst_ip", "dst_ip", "dstip", "destination.ip", "destination_ip", "dest_ip", "data.dst", "predecoded.dstip", "event.dest_ip"},
-	"user":       {"data.user", "user.name", "username", "data.username", "user", "predecoded.user", "data.srcuser", "event.user"},
+	"user":       {"data.user", "user.name", "username", "data.username", "user", "predecoded.user", "data.srcuser", "data.dstuser", "predecoded.dstuser", "event.user"},
 	"host":       {"agent.name", "host.name", "hostname", "data.host", "host", "agent.hostname", "data.hostname", "predecoded.hostname", "event.hostname"},
 	"hash":       {"data.hash", "file.hash.sha256", "file.hash.md5", "data.md5", "data.sha256", "hash", "sha256", "md5"},
 	"url":        {"data.url", "url.full", "url.domain", "url", "data.full_url", "data.reference"},

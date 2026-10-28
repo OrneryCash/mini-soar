@@ -106,6 +106,6 @@ func main() {
 		port = 8080
 	}
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	log.Printf("mini-SOAR (Go) listening on %s  (base=%s)", addr, BASE)
+	log.Printf("Better Call SOAR (Go) listening on %s  (base=%s)", addr, BASE)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
